@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "TypeCheck on Save",
+  "description": "Run TypeScript compiler to check for type errors after saving .ts files",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "*.ts"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Run getDiagnostics on the edited TypeScript file to check for type errors, syntax issues, or linting problems. If errors found, fix them immediately."
+  }
+}

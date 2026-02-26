@@ -1,0 +1,55 @@
+{
+  "name": "archview",
+  "displayName": "ArchView - AI Architecture Diagrams",
+  "description": "Automatically generate interactive architecture diagrams from your codebase using AI",
+  "version": "0.1.0",
+  "publisher": "kiro",
+  "engines": {
+    "kiro": "^1.0.0",
+    "node": ">=18.0.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "architecture",
+    "diagram",
+    "visualization",
+    "ai",
+    "codebase"
+  ],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:property": "jest --testPathPattern=property",
+    "test:performance": "jest --testPathPattern=performance",
+    "lint": "eslint src --ext ts",
+    "package": "npm run compile && vsce package"
+  },
+  "dependencies": {
+    "tree-sitter": "^0.21.0",
+    "tree-sitter-python": "^0.21.0",
+    "tree-sitter-javascript": "^0.21.0",
+    "tree-sitter-typescript": "^0.21.0",
+    "tree-sitter-java": "^0.21.0",
+    "tree-sitter-go": "^0.21.0",
+    "cytoscape": "^3.28.0",
+    "cytoscape-dagre": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/jest": "^29.5.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.0",
+    "fast-check": "^3.15.0",
+    "typescript": "^5.3.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0"
+  }
+}

@@ -6,12 +6,11 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
 
 ## Tasks
 
-- [ ] 1. Set up project structure and dependencies
-  - Create extension directory structure: `src/`, `src/analysis/`, `src/diagram/`, `src/ui/`, `src/types/`
-  - Initialize `package.json` with Kiro extension metadata and dependencies
+- [x] 1. Set up project structure and dependencies
+  - Note: package.json, tsconfig.json, and src/ directory already exist - verify and complete remaining items
+  - Create extension subdirectories: `src/analysis/`, `src/diagram/`, `src/ui/`
   - Add dependencies: `tree-sitter`, language parsers (`tree-sitter-python`, `tree-sitter-javascript`, `tree-sitter-typescript`, `tree-sitter-java`, `tree-sitter-go`), `cytoscape`, `cytoscape-dagre`
-  - Add dev dependencies: `@types/node`, `jest`, `@types/jest`, `fast-check`, `typescript`
-  - Create `tsconfig.json` with Kiro extension compiler options
+  - Add dev dependencies: `@types/node`, `jest`, `@types/jest`, `fast-check`
   - Set up Jest configuration for unit and property-based testing
   - _Requirements: 8.2_
 
@@ -42,7 +41,7 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Add file count and depth limiting
     - _Requirements: 1.1, 8.4, 12.1_
   
-  - [ ]* 3.2 Write property test for file pattern filtering
+  - [ ] 3.2 Write property test for file pattern filtering
     - **Property 23: File Pattern Filtering**
     - **Validates: Requirements 8.4**
   
@@ -53,7 +52,7 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Handle parse errors gracefully with fallback to partial results
     - _Requirements: 1.2, 1.4, 12.4_
   
-  - [ ]* 3.4 Write property tests for multi-language support
+  - [ ] 3.4 Write property tests for multi-language support
     - **Property 3: Multi-Language Support**
     - **Validates: Requirements 1.4, 12.1**
     - **Property 4: Language Pattern Recognition**
@@ -67,7 +66,7 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Assign abstraction levels based on component type and nesting
     - _Requirements: 1.2, 6.2, 6.3, 6.4_
   
-  - [ ]* 3.6 Write property test for component detection
+  - [ ] 3.6 Write property test for component detection
     - **Property 1: Component Detection Completeness**
     - **Validates: Requirements 1.2**
   
@@ -79,11 +78,18 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Calculate relationship strength based on occurrence count
     - _Requirements: 1.3_
   
-  - [ ]* 3.8 Write property test for relationship detection
+  - [ ] 3.8 Write property test for relationship detection
     - **Property 2: Relationship Detection Completeness**
     - **Validates: Requirements 1.3**
 
 - [ ] 4. Implement Analysis Service orchestration
+  - [ ] 4.0 Validate Kiro AI API integration (SPIKE)
+    - Create minimal POC to test Kiro AI API availability and signature
+    - Verify API rate limits, token constraints, and response format
+    - Document actual API shape for use in Task 6
+    - Test fallback behavior when AI unavailable
+    - _Requirements: 2.2_
+  
   - [ ] 4.1 Create main AnalysisService class
     - Implement `analyzeCodebase()` method orchestrating scan → parse → extract → build graph
     - Add progress tracking with percentage updates every 5 seconds
@@ -92,7 +98,7 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Implement result caching with file modification time checks
     - _Requirements: 1.1, 1.5, 9.3, 9.5, 10.3_
   
-  - [ ]* 4.2 Write property test for cache behavior
+  - [ ] 4.2 Write property test for cache behavior
     - **Property 24: Cache Hit for Unchanged Files**
     - **Validates: Requirements 9.5**
   
@@ -109,7 +115,7 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Implement retry logic with exponential backoff
     - _Requirements: 1.6, 10.1, 10.4_
   
-  - [ ]* 4.5 Write property test for error message display
+  - [ ] 4.5 Write property test for error message display
     - **Property 5: Error Message Display**
     - **Validates: Requirements 1.6, 10.1, 10.2, 10.5**
 
@@ -118,7 +124,7 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
 
 - [ ] 6. Implement Kiro AI integration
   - [ ] 6.1 Create KiroAIService class
-    - Implement `analyzeArchitecture()` method using Kiro AI API
+    - Implement `analyzeArchitecture()` method using Kiro AI API (validated in Task 4.0)
     - Implement `generateComponentDescription()` for component descriptions
     - Implement `suggestComponentGrouping()` for intelligent grouping
     - Build structured prompts for architecture analysis
@@ -136,9 +142,10 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Create heuristic-based component grouping (by directory structure)
     - Generate descriptions from component names and types when AI unavailable
     - Add error handling for AI service failures with graceful degradation
+    - Ensure offline/air-gapped environments still produce useful diagrams
     - _Requirements: 10.2_
   
-  - [ ]* 6.4 Write unit tests for AI integration
+  - [ ] 6.4 Write unit tests for AI integration
     - Test prompt construction with various component structures
     - Test response parsing with valid and malformed responses
     - Test fallback behavior when AI unavailable
@@ -153,7 +160,7 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Implement timeout management (60 second max for generation)
     - _Requirements: 2.1, 2.3, 2.4, 2.7, 12.2_
   
-  - [ ]* 7.2 Write property tests for diagram generation
+  - [ ] 7.2 Write property tests for diagram generation
     - **Property 6: Analysis-to-Diagram Fidelity**
     - **Validates: Requirements 2.1, 2.3, 2.4**
     - **Property 7: Abstraction Level Generation**
@@ -169,7 +176,7 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Preserve relationships between visible components
     - _Requirements: 6.1, 6.2, 6.3, 6.4_
   
-  - [ ]* 7.4 Write property test for abstraction level filtering
+  - [ ] 7.4 Write property test for abstraction level filtering
     - **Property 19: Abstraction Level Filtering**
     - **Validates: Requirements 6.2, 6.3, 6.4**
   
@@ -180,13 +187,14 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Add component type-based shapes (rectangle, ellipse, hexagon)
     - _Requirements: 2.5, 12.2_
   
-  - [ ]* 7.6 Write property test for language visual distinction
+  - [ ] 7.6 Write property test for language visual distinction
     - **Property 29: Language Visual Distinction**
     - **Validates: Requirements 12.2**
 
 - [ ] 8. Implement diagram rendering with Cytoscape.js
-  - [ ] 8.1 Create DiagramRenderer class
-    - Implement `initialize()` to set up Cytoscape instance
+  - [ ] 8.1 Create DiagramRenderer class (webview context)
+    - Note: This class runs in the webview's browser context, NOT in Node.js extension host
+    - Implement `initialize()` to set up Cytoscape instance in browser DOM
     - Implement `renderDiagram()` to convert DiagramData to Cytoscape format
     - Configure Dagre layout algorithm for hierarchical diagrams
     - Apply node and edge styles from DiagramData
@@ -201,7 +209,7 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Maintain element readability at zoom levels 25%-400%
     - _Requirements: 5.1, 5.2, 5.3, 5.4_
   
-  - [ ]* 8.3 Write property tests for navigation
+  - [ ] 8.3 Write property tests for navigation
     - **Property 15: Pan Operation Updates Viewport**
     - **Validates: Requirements 5.1**
     - **Property 16: Zoom Operation Updates Scale**
@@ -209,7 +217,7 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - **Property 17: Fit-to-View Reset**
     - **Validates: Requirements 5.4**
   
-  - [ ] 8.3 Implement element interaction
+  - [ ] 8.4 Implement element interaction
     - Add click event handlers with `onElementClick()` callback
     - Add hover event handlers with `onElementHover()` callback
     - Implement `selectElement()` to highlight selected element
@@ -217,20 +225,20 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Add tooltip rendering on hover with element name and file count
     - _Requirements: 3.1, 3.4_
   
-  - [ ]* 8.4 Write property tests for element selection
+  - [ ] 8.5 Write property tests for element selection
     - **Property 9: Element Selection Highlighting**
     - **Validates: Requirements 3.1**
     - **Property 11: Tooltip Information Completeness**
     - **Validates: Requirements 3.4**
   
-  - [ ] 8.5 Implement diagram export
+  - [ ] 8.6 Implement diagram export
     - Implement `exportToPNG()` with minimum 1920x1080 resolution
     - Implement `exportToSVG()` generating valid SVG documents
     - Add timeout management (5 second max for export)
     - Include all visible elements at current abstraction level
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
   
-  - [ ]* 8.6 Write property tests for export
+  - [ ] 8.7 Write property tests for export
     - **Property 20: PNG Export Resolution**
     - **Validates: Requirements 7.2**
     - **Property 21: SVG Export Validity**
@@ -242,7 +250,7 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 10. Implement webview integration
-  - [ ] 10.1 Create WebviewManager class
+  - [ ] 10.1 Create WebviewManager class (extension host context)
     - Implement `createWebview()` using Kiro webview API
     - Implement `disposeWebview()` with cleanup
     - Set up bidirectional messaging with `postMessage()` and `onMessage()`
@@ -250,12 +258,13 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Implement `setAbstractionLevel()` to update diagram filtering
     - _Requirements: 2.1, 6.5_
   
-  - [ ] 10.2 Create webview HTML/CSS/JS
+  - [ ] 10.2 Create webview HTML/CSS/JS bundle
     - Create HTML template with diagram container and control panel
     - Add CSS for diagram controls (zoom buttons, abstraction level selector, export button)
     - Implement JavaScript message handler for receiving diagram data
-    - Initialize DiagramRenderer when webview loads
+    - Initialize DiagramRenderer (from Task 8.1) when webview loads
     - Wire up control buttons to send messages back to extension
+    - Bundle webview assets for deployment
     - _Requirements: 5.4, 6.5, 7.1_
   
   - [ ] 10.3 Implement message handling
@@ -267,7 +276,7 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Handle `refreshRequested` message to regenerate diagram
     - _Requirements: 3.1, 6.5, 7.1, 11.1_
   
-  - [ ]* 10.4 Write integration tests for webview communication
+  - [ ] 10.4 Write integration tests for webview communication
     - Test message flow from extension to webview
     - Test message flow from webview to extension
     - Test diagram data serialization/deserialization
@@ -289,7 +298,7 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Update mappings when diagram refreshes
     - _Requirements: 3.2, 3.3_
   
-  - [ ]* 11.3 Write property tests for file highlighting
+  - [ ] 11.3 Write property tests for file highlighting
     - **Property 10: File Mapping Integrity**
     - **Validates: Requirements 3.2, 3.3, 4.1**
     - **Property 12: Highlight State Transitions**
@@ -323,13 +332,13 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Implement `getAnalysisResults()`, `setSelectedElement()`, `clearSelection()`
     - _Requirements: 5.5, 6.6, 11.4_
   
-  - [ ]* 12.3 Write property test for state preservation
+  - [ ] 12.3 Write property test for state preservation
     - **Property 18: State Preservation During Navigation**
     - **Validates: Requirements 5.5, 6.6, 11.4**
   
   - [ ] 12.4 Implement configuration management
     - Create configuration schema in `package.json`
-    - Add settings: `includePatterns`, `excludePatterns`, `maxFiles`, `maxDepth`, `languages`, `aiEnabled`, `autoRefresh`
+    - Add settings: `includePatterns`, `excludePatterns`, `maxFiles`, `maxDepth`, `languages`, `aiEnabled`, `autoRefresh`, `autoRefreshDebounce` (default: 10s, configurable)
     - Provide default values (exclude `node_modules`, `.git`, etc.)
     - Listen to configuration changes and invalidate cache
     - _Requirements: 8.3, 8.4, 8.5_
@@ -345,12 +354,12 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
 - [ ] 13. Implement auto-refresh and file watching
   - [ ] 13.1 Create FileWatcher service
     - Use Kiro file system watcher API to detect file changes
-    - Debounce changes (wait 30 seconds after last change)
+    - Debounce changes using configurable `autoRefreshDebounce` setting (default: 10 seconds)
     - Track which files have changed since last analysis
     - Respect `autoRefresh` configuration setting
     - _Requirements: 11.2, 11.3_
   
-  - [ ]* 13.2 Write property test for file change detection
+  - [ ] 13.2 Write property test for file change detection
     - **Property 27: File Change Detection**
     - **Validates: Requirements 11.2, 11.5**
   
@@ -370,7 +379,7 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Add cancel button for long operations
     - _Requirements: 10.3_
   
-  - [ ]* 14.2 Write property test for progress indicator visibility
+  - [ ] 14.2 Write property test for progress indicator visibility
     - **Property 25: Progress Indicator Visibility**
     - **Validates: Requirements 10.3**
   
@@ -381,7 +390,7 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Add "Retry" action for recoverable errors
     - _Requirements: 10.1, 10.2, 10.5_
   
-  - [ ]* 14.4 Write property test for error logging
+  - [ ] 14.4 Write property test for error logging
     - **Property 26: Error Logging**
     - **Validates: Requirements 10.4**
 
@@ -394,7 +403,8 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - _Requirements: 9.1, 9.2, 9.4_
   
   - [ ] 15.2 Optimize analysis performance
-    - Use worker threads for parallel file parsing
+    - Validate worker thread support in Kiro extension host (may have restrictions)
+    - Use worker threads for parallel file parsing if supported, otherwise use async batching
     - Implement incremental parsing for file updates
     - Batch file system operations
     - Optimize AST traversal algorithms
@@ -407,7 +417,7 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Use requestAnimationFrame for smooth animations
     - _Requirements: 2.7_
   
-  - [ ]* 15.4 Write performance tests
+  - [ ] 15.4 Write performance tests
     - Benchmark analysis time with 1000+ file codebase (< 120s)
     - Benchmark diagram rendering time (< 60s)
     - Benchmark export time (< 5s)
@@ -421,7 +431,7 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - Handle unknown file types as generic components
     - _Requirements: 12.3, 12.5_
   
-  - [ ]* 16.2 Write property test for multi-language integration
+  - [ ] 16.2 Write property test for multi-language integration
     - **Property 28: Multi-Language Diagram Integration**
     - **Validates: Requirements 12.3**
 
@@ -460,11 +470,13 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
 
 ## Notes
 
-- Tasks marked with `*` are optional and can be skipped for faster MVP
 - Each task references specific requirements for traceability
-- Property-based tests validate universal correctness properties from the design document
+- Property-based tests validate universal correctness properties from the design document (100 iterations per test)
 - Checkpoints ensure incremental validation and provide opportunities for user feedback
 - All code is implemented in TypeScript for unified architecture
 - Tree-sitter Node.js bindings used for multi-language parsing
 - Kiro AI API used for architectural insights (no external providers)
-- Cytoscape.js used for interactive diagram rendering
+- Cytoscape.js runs in webview browser context, not Node.js extension host
+- DiagramRenderer class lives in webview JS bundle, not extension host
+- Auto-refresh debounce is configurable (default: 10 seconds)
+- Worker threads may have restrictions in Kiro extension host - validate early in Task 15.2

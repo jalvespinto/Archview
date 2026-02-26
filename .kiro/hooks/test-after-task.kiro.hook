@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Test After Task Completion",
+  "description": "Remind to run relevant tests after completing a task in the spec",
+  "version": "1",
+  "when": {
+    "type": "postTaskExecution"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A task was just completed. Check if the task has associated property-based tests (marked with * in tasks.md). If yes, remind to run those tests. Also check if unit tests should be run for the implemented functionality."
+  }
+}
