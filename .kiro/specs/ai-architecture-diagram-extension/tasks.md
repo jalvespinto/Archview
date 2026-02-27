@@ -82,39 +82,41 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - **Property 2: Relationship Detection Completeness**
     - **Validates: Requirements 1.3**
 
-- [ ] 4. Implement Analysis Service orchestration
+- [ ] 4. Implement Analysis Service orchestration (Phase 1: Grounding Layer)
   - [ ] 4.0 Validate Kiro AI API integration (SPIKE)
     - Create minimal POC to test Kiro AI API availability and signature
     - Verify API rate limits, token constraints, and response format
     - Document actual API shape for use in Task 6
     - Test fallback behavior when AI unavailable
     - _Requirements: 2.2_
-  
-  - [ ] 4.1 Create main AnalysisService class
-    - Implement `analyzeCodebase()` method orchestrating scan → parse → extract → build graph
+
+  - [ ] 4.1 Create main AnalysisService class with Grounding Layer output
+    - Implement `buildGroundingLayer()` method orchestrating scan → parse → extract → build GroundingData
+    - Produce compact `GroundingData` struct: directory tree, per-file metadata (language, class/function names, exports), import graph, inheritance graph
     - Add progress tracking with percentage updates every 5 seconds
-    - Implement timeout management (120 second max for analysis)
+    - Implement timeout management (120 second max for static analysis phase)
     - Add cancellation support for long-running operations
-    - Implement result caching with file modification time checks
+    - Implement result caching keyed by file modification times
     - _Requirements: 1.1, 1.5, 9.3, 9.5, 10.3_
-  
+
   - [ ] 4.2 Write property test for cache behavior
     - **Property 24: Cache Hit for Unchanged Files**
     - **Validates: Requirements 9.5**
-  
-  - [ ] 4.3 Implement dependency graph builder
-    - Create `DependencyGraphBuilder` class to construct graph from components and relationships
-    - Build hierarchical structure (parent-child relationships)
-    - Validate graph integrity (no cycles, valid references)
-    - _Requirements: 1.3, 2.5_
-  
+
+  - [ ] 4.3 Implement GroundingData builder
+    - Create `GroundingDataBuilder` class that converts raw `Component[]` and `Relationship[]` from extractors into the compact `GroundingData` structure
+    - Build `DirectoryNode` tree from file paths
+    - Resolve import paths where possible (relative → absolute)
+    - Validate grounding data integrity
+    - _Requirements: 1.2, 1.3, 2.5_
+
   - [ ] 4.4 Add error handling and logging
     - Create `ErrorHandler` class with methods for each error category
     - Implement graceful degradation for analysis errors
     - Add detailed logging to extension output channel
     - Implement retry logic with exponential backoff
     - _Requirements: 1.6, 10.1, 10.4_
-  
+
   - [ ] 4.5 Write property test for error message display
     - **Property 5: Error Message Display**
     - **Validates: Requirements 1.6, 10.1, 10.2, 10.5**
@@ -122,41 +124,48 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
 - [ ] 5. Checkpoint - Verify analysis functionality
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 6. Implement Kiro AI integration
+- [ ] 6. Implement Kiro AI integration (Phase 2: Architectural Model)
   - [ ] 6.1 Create KiroAIService class
-    - Implement `analyzeArchitecture()` method using Kiro AI API (validated in Task 4.0)
-    - Implement `generateComponentDescription()` for component descriptions
-    - Implement `suggestComponentGrouping()` for intelligent grouping
-    - Build structured prompts for architecture analysis
-    - Parse AI responses into `AIInsights` structure
-    - _Requirements: 2.2_
-  
-  - [ ] 6.2 Implement AI response caching
-    - Create cache keyed by component structure hash
+    - Implement `interpretArchitecture(grounding: GroundingData)` as the primary entry point using Kiro AI API (validated in Task 4.0)
+    - Build Tier 1 prompt from GroundingData (directory tree + file metadata + import/inheritance graphs)
+    - Parse LLM JSON response into `ArchitecturalModel` structure
+    - Detect low-confidence responses and trigger Tier 2/3 enrichment automatically
+    - _Requirements: 1.4, 2.2_
+
+  - [ ] 6.2 Implement tiered enrichment
+    - Implement `enrichGrounding()` for Tier 2: add function signatures and method lists for ambiguous files
+    - Implement Tier 3 enrichment: add first 50 lines of file content for files the LLM flags
+    - Retry `interpretArchitecture()` with enriched grounding when confidence is low
+    - Cap enrichment at Tier 3 (never send full file content)
+    - _Requirements: 1.4_
+
+  - [ ] 6.3 Implement ArchitecturalModel response caching
+    - Create cache keyed by hash of GroundingData structure
     - Implement LRU eviction (max 100 entries)
     - Store cache in extension global state
-    - Add cache invalidation on structure changes
+    - Invalidate cache entries when corresponding files change (modification time check)
+    - Cache tier-specific responses separately
     - _Requirements: 9.5_
-  
-  - [ ] 6.3 Implement fallback strategies
-    - Create heuristic-based component grouping (by directory structure)
-    - Generate descriptions from component names and types when AI unavailable
-    - Add error handling for AI service failures with graceful degradation
-    - Ensure offline/air-gapped environments still produce useful diagrams
+
+  - [ ] 6.4 Implement fallback strategy (heuristic Architectural Model)
+    - When LLM unavailable: produce ArchitecturalModel heuristically — group files by top-level directory, use directory names as component names, derive relationships from import graph
+    - Fallback still produces a valid `ArchitecturalModel` (diagram renders without LLM)
+    - Mark fallback results with `confidence: 'low'` and notify user with non-blocking warning
     - _Requirements: 10.2_
-  
-  - [ ] 6.4 Write unit tests for AI integration
-    - Test prompt construction with various component structures
-    - Test response parsing with valid and malformed responses
-    - Test fallback behavior when AI unavailable
+
+  - [ ] 6.5 Write unit tests for AI integration
+    - Test Tier 1 prompt construction with various GroundingData structures
+    - Test ArchitecturalModel parsing from valid and malformed LLM responses
+    - Test tiered enrichment trigger on low-confidence response
+    - Test fallback heuristic produces valid ArchitecturalModel
     - Test cache hit/miss scenarios
 
 - [ ] 7. Implement diagram generation
   - [ ] 7.1 Create DiagramGenerator class
-    - Implement `generateDiagram()` method converting AnalysisResult to DiagramData
-    - Create nodes from components with appropriate styles based on type and language
-    - Create edges from relationships with styles based on relationship type
-    - Apply AI insights for component grouping and enhanced naming
+    - Implement `generateDiagram()` method converting `ArchitecturalModel` to `DiagramData`
+    - Create nodes from `ArchitecturalComponent` entries, using LLM-generated names and descriptions as labels
+    - Create edges from `ArchitecturalRelationship` entries with styles based on relationship type
+    - Preserve LLM-identified hierarchy (parent/child components → nested diagram groups)
     - Implement timeout management (60 second max for generation)
     - _Requirements: 2.1, 2.3, 2.4, 2.7, 12.2_
   
@@ -474,8 +483,10 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
 - Property-based tests validate universal correctness properties from the design document (100 iterations per test)
 - Checkpoints ensure incremental validation and provide opportunities for user feedback
 - All code is implemented in TypeScript for unified architecture
-- Tree-sitter Node.js bindings used for multi-language parsing
-- Kiro AI API used for architectural insights (no external providers)
+- **Hybrid architecture**: Tree-sitter produces a compact Grounding Layer (Phase 1); the LLM interprets it into the Architectural Model (Phase 2); Cytoscape.js renders the result (Phase 3)
+- The LLM is the **primary producer** of the Architectural Model — not an optional enhancement. Static analysis feeds it structured facts, not the other way around
+- Tiered enrichment: Tier 1 (names + paths + graph) is sent by default; Tier 2 (signatures) and Tier 3 (file excerpts) are added only when the LLM signals low confidence
+- Kiro AI API used for LLM interpretation (no external providers)
 - Cytoscape.js runs in webview browser context, not Node.js extension host
 - DiagramRenderer class lives in webview JS bundle, not extension host
 - Auto-refresh debounce is configurable (default: 10 seconds)

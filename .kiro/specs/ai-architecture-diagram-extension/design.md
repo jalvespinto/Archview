@@ -10,7 +10,7 @@ The AI Architecture Diagram Extension is a Kiro IDE extension that automatically
 2. **Multi-language support**: Handle polyglot projects seamlessly
 3. **Performance**: Analyze large codebases (1000+ files) efficiently
 4. **Interactivity**: Provide smooth, responsive diagram navigation and IDE integration
-5. **AI-enhanced insights**: Leverage AI for intelligent component grouping and layout
+5. **AI-driven architecture interpretation**: Use the LLM as the primary producer of the Architectural Model, with static analysis providing a compact, information-dense Grounding Layer as input — not the other way around
 
 ### Technology Stack
 
@@ -84,12 +84,12 @@ The extension follows a layered architecture with clear separation of concerns:
 **Diagram Generation Flow:**
 1. User activates extension → Extension Controller
 2. Extension Controller → Analysis Service
-3. Analysis Service scans files → Tree-sitter parsing
-4. Analysis Service builds dependency graph
-5. Analysis Service → Kiro AI API (component grouping, naming)
-6. Kiro AI API returns architectural insights
-7. Analysis Service returns enhanced data → Extension Controller
-8. Extension Controller → Webview Manager (diagram data)
+3. Analysis Service scans files → Tree-sitter parsing → builds compact **Grounding Layer** (directory tree, class/function names, import graph, inheritance graph)
+4. Analysis Service → Kiro AI API (Grounding Layer as structured input — Tier 1)
+5. IF LLM requests more detail for ambiguous files → Analysis Service adds function signatures (Tier 2) or file content excerpts (Tier 3)
+6. Kiro AI API produces **Architectural Model** (named components with roles, descriptions, relationships, detected patterns)
+7. Analysis Service returns Architectural Model → Extension Controller
+8. Extension Controller → Webview Manager (diagram data derived from Architectural Model)
 9. Webview Manager → Diagram Renderer (Cytoscape.js)
 10. Diagram displayed to user
 
@@ -140,23 +140,26 @@ interface ExtensionController {
 **Interface:**
 ```typescript
 interface AnalysisService {
-  // Main analysis
+  // Main analysis (orchestrates all phases)
   analyzeCodebase(
     rootPath: string,
     config: AnalysisConfig
   ): Promise<AnalysisResult>;
-  
+
+  // Phase 1: static analysis → Grounding Layer
+  buildGroundingLayer(
+    rootPath: string,
+    config: AnalysisConfig
+  ): Promise<GroundingData>;
+
+  // Phase 2: LLM interpretation → Architectural Model
+  interpretWithLLM(
+    grounding: GroundingData,
+    config: AnalysisConfig
+  ): Promise<ArchitecturalModel>;
+
   // Language detection
   detectLanguage(filePath: string): Language;
-  
-  // Parsing
-  parseFile(filePath: string, language: Language): Promise<AST>;
-  
-  // Dependency analysis
-  buildDependencyGraph(asts: AST[]): DependencyGraph;
-  
-  // AI enhancement
-  enhanceWithAI(graph: DependencyGraph): Promise<EnhancedArchitecture>;
 }
 ```
 
@@ -281,23 +284,125 @@ interface FileHighlighter {
 
 ## Data Models
 
+### GroundingData
+
+The compact, structured output of static analysis — the input fed to the LLM. Designed to be information-dense while fitting within the LLM's context window.
+
+```typescript
+interface GroundingData {
+  rootPath: string;
+  timestamp: number;
+  directoryTree: DirectoryNode;
+  files: FileGroundingData[];
+  importGraph: ImportEdge[];
+  inheritanceGraph: InheritanceEdge[];
+}
+
+interface DirectoryNode {
+  name: string;
+  path: string;
+  children: DirectoryNode[];
+  files: string[]; // file paths in this directory
+}
+
+interface FileGroundingData {
+  path: string;
+  language: Language;
+  exports: string[];          // exported symbol names
+  classes: ClassGroundingData[];
+  topLevelFunctions: FunctionGroundingData[];
+  imports: ImportRef[];
+}
+
+interface ClassGroundingData {
+  name: string;
+  superClass?: string;
+  interfaces?: string[];
+  methods?: string[];         // Tier 2: added only when LLM requests more detail
+}
+
+interface FunctionGroundingData {
+  name: string;
+  signature?: string;         // Tier 2: params + return type, no body
+}
+
+interface ImportRef {
+  from: string;               // import source path (raw, not resolved)
+  symbols: string[];          // imported names, or ['*'] for wildcard
+}
+
+interface ImportEdge {
+  sourceFile: string;
+  targetFile: string;         // resolved to absolute path where possible
+  symbols: string[];
+}
+
+interface InheritanceEdge {
+  childClass: string;
+  parentClass: string;
+  sourceFile: string;
+  type: 'extends' | 'implements';
+}
+```
+
+### ArchitecturalModel
+
+The primary output of LLM interpretation — the semantic understanding of the codebase architecture.
+
+```typescript
+interface ArchitecturalModel {
+  components: ArchitecturalComponent[];
+  relationships: ArchitecturalRelationship[];
+  patterns: string[];         // e.g., 'MVC', 'microservices', 'control plane / data plane'
+  metadata: ArchitecturalModelMetadata;
+}
+
+interface ArchitecturalComponent {
+  id: string;
+  name: string;               // LLM-generated meaningful name
+  description: string;        // LLM-generated role description (max 50 words)
+  role: string;               // e.g., 'control plane', 'data access layer', 'auth module'
+  filePaths: string[];        // source files that make up this component
+  abstractionLevel: AbstractionLevel;
+  subComponents: string[];    // IDs of child ArchitecturalComponents
+  parent: string | null;
+}
+
+interface ArchitecturalRelationship {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  type: RelationshipType;
+  description: string;        // LLM-generated description of the relationship
+  strength: number;           // 0-1
+}
+
+interface ArchitecturalModelMetadata {
+  llmInferenceTimeMs: number;
+  tierUsed: 1 | 2 | 3;       // highest tier of enrichment applied
+  confidence: 'high' | 'medium' | 'low';
+  filesAnalyzed: number;
+}
+```
+
 ### AnalysisResult
 
-Represents the complete analysis of a codebase.
+Represents the complete analysis of a codebase, combining both phases.
 
 ```typescript
 interface AnalysisResult {
   timestamp: number;
   rootPath: string;
-  components: Component[];
-  relationships: Relationship[];
+  groundingData: GroundingData;       // static analysis output
+  architecturalModel: ArchitecturalModel; // LLM interpretation
   metadata: AnalysisMetadata;
 }
 
 interface AnalysisMetadata {
   fileCount: number;
   languageDistribution: Record<Language, number>;
-  analysisTimeMs: number;
+  staticAnalysisTimeMs: number;
+  llmInterpretationTimeMs: number;
   treeDepth: number;
 }
 ```
@@ -346,7 +451,8 @@ enum AbstractionLevel {
 interface ComponentMetadata {
   lineCount: number;
   exportedSymbols: string[];
-  description?: string; // AI-generated description
+  description?: string;  // LLM-generated description from ArchitecturalModel
+  role?: string;         // LLM-generated role from ArchitecturalModel
 }
 ```
 
@@ -462,38 +568,26 @@ type WebviewMessage =
 
 ## AI Integration Strategy
 
-### Kiro AI Integration
+### Overview: LLM as Primary Architectural Model Producer
 
-The extension uses Kiro's built-in AI capabilities through the extension API:
+The LLM is not an optional enhancement layer — it is the primary producer of the Architectural Model. Static analysis (Tree-sitter) builds the Grounding Layer, which is fed to the LLM. The LLM then produces the semantic interpretation that the diagram is built from.
+
+### Kiro AI Integration
 
 ```typescript
 interface KiroAIService {
-  analyzeArchitecture(
-    components: Component[],
-    relationships: Relationship[]
-  ): Promise<AIInsights>;
-  
-  generateComponentDescription(
-    component: Component,
-    context: Component[]
-  ): Promise<string>;
-  
-  suggestComponentGrouping(
-    components: Component[]
-  ): Promise<ComponentGroup[]>;
-}
+  // Primary entry point: interpret grounding data into an architectural model
+  interpretArchitecture(
+    grounding: GroundingData,
+    tier?: 1 | 2 | 3
+  ): Promise<ArchitecturalModel>;
 
-interface AIInsights {
-  componentGroups: ComponentGroup[];
-  architecturalPatterns: string[];
-  suggestions: string[];
-}
-
-interface ComponentGroup {
-  name: string;
-  description: string;
-  componentIds: string[];
-  reasoning: string;
+  // Enrich grounding data when LLM needs more detail for specific files
+  enrichGrounding(
+    grounding: GroundingData,
+    ambiguousFilePaths: string[],
+    targetTier: 2 | 3
+  ): Promise<GroundingData>;
 }
 ```
 
@@ -502,81 +596,121 @@ interface ComponentGroup {
 import * as kiro from 'kiro';
 
 class KiroAIService {
-  async analyzeArchitecture(
-    components: Component[],
-    relationships: Relationship[]
-  ): Promise<AIInsights> {
-    const prompt = this.buildArchitecturePrompt(components, relationships);
-    
-    // Use Kiro's AI agent API
+  async interpretArchitecture(
+    grounding: GroundingData,
+    tier: 1 | 2 | 3 = 1
+  ): Promise<ArchitecturalModel> {
+    const prompt = this.buildGroundingPrompt(grounding, tier);
     const response = await kiro.ai.sendMessage(prompt);
-    
-    return this.parseAIResponse(response);
-  }
-  
-  private buildArchitecturePrompt(
-    components: Component[],
-    relationships: Relationship[]
-  ): string {
-    // Build structured prompt for Kiro AI
-    return `Analyze this software architecture and provide insights...`;
+    const model = this.parseArchitecturalModel(response);
+
+    // If LLM signals ambiguity, enrich and retry at higher tier
+    if (model.metadata.confidence === 'low' && tier < 3) {
+      const ambiguous = this.extractAmbiguousFiles(model, grounding);
+      const enriched = await this.enrichGrounding(grounding, ambiguous, (tier + 1) as 2 | 3);
+      return this.interpretArchitecture(enriched, (tier + 1) as 2 | 3);
+    }
+
+    return model;
   }
 }
 ```
 
+### Tiered Enrichment Strategy
+
+The Grounding Layer is sent to the LLM in tiers of increasing detail. Higher tiers are only used when the LLM cannot confidently determine architectural groupings from the tier below.
+
+**Tier 1 (always sent — default)**
+- Directory tree (full hierarchy)
+- Per-file: path, language, exported class/function names
+- Import graph (who imports who)
+- Inheritance graph (class hierarchies)
+- Rationale: Directory co-location + naming conventions + import clustering is sufficient for ~80% of well-structured codebases.
+
+**Tier 2 (added for ambiguous files)**
+- Everything in Tier 1, plus:
+- Function signatures (name, parameters, return type — no body)
+- Class method lists
+- Rationale: Covers cases where names alone are ambiguous (e.g., `util.ts`, `helpers.go`)
+
+**Tier 3 (added for critical/unclear key files)**
+- Everything in Tier 2, plus:
+- First 50 lines of file content for files the LLM flags
+- Rationale: Covers subtle patterns (CQRS, event sourcing) not visible from names alone
+
 ### Prompt Engineering
 
-**Component Grouping Prompt:**
+**Tier 1 Architecture Interpretation Prompt:**
 ```
-You are analyzing a software architecture. Given the following components and their relationships, identify logical groupings that represent architectural layers, features, or modules.
+You are analyzing a software architecture. Below is the structural grounding data extracted
+from the codebase via static analysis. Your task is to produce a semantic Architectural Model.
 
-Components:
-[JSON list of components with names, types, and file paths]
+Directory structure:
+{JSON directory tree}
 
-Relationships:
-[JSON list of relationships showing dependencies]
+Files and their exports/imports:
+{JSON array of FileGroundingData}
 
-Provide a JSON response with suggested groups, each containing:
-- name: A descriptive name for the group
-- description: What this group represents
-- componentIds: Array of component IDs in this group
-- reasoning: Why these components belong together
+Import relationships:
+{JSON array of ImportEdge}
 
-Focus on identifying:
-1. Architectural layers (presentation, business logic, data access)
-2. Feature modules (user management, payment processing, etc.)
-3. Shared utilities and infrastructure
-```
+Inheritance relationships:
+{JSON array of InheritanceEdge}
 
-**Component Description Prompt:**
-```
-Generate a concise description (max 50 words) for this software component:
+Produce a JSON response with this exact structure:
+{
+  "components": [
+    {
+      "id": "unique-id",
+      "name": "Descriptive component name",
+      "description": "What this component does (max 50 words)",
+      "role": "architectural role (e.g., 'control plane', 'auth module', 'data access layer')",
+      "filePaths": ["list", "of", "file", "paths"],
+      "abstractionLevel": 1,
+      "subComponents": [],
+      "parent": null
+    }
+  ],
+  "relationships": [
+    {
+      "id": "unique-id",
+      "sourceId": "component-id",
+      "targetId": "component-id",
+      "type": "import|dependency|inheritance|composition|function_call",
+      "description": "What this relationship represents",
+      "strength": 0.8
+    }
+  ],
+  "patterns": ["list of detected architectural patterns"],
+  "confidence": "high|medium|low",
+  "ambiguousFiles": ["paths of files needing more detail if confidence is low"]
+}
 
-Name: {component.name}
-Type: {component.type}
-Language: {component.language}
-Exported symbols: {component.metadata.exportedSymbols}
-
-Context (related components):
-{context components}
-
-Describe what this component does and its role in the architecture.
+Focus on:
+1. Grouping files that belong together into named architectural components
+2. Identifying layers (e.g., API, business logic, data access, infrastructure)
+3. Detecting feature modules (e.g., auth, payments, notifications)
+4. Naming components at a meaningful level of abstraction
 ```
 
 ### AI Response Caching
 
-To optimize performance:
-- Cache AI responses keyed by component structure hash
-- Invalidate cache when component structure changes
+To optimize performance and cost:
+- Cache ArchitecturalModel responses keyed by a hash of the GroundingData structure
+- Invalidate cache when any file in the grounding data changes (modification time check)
 - Store cache in extension global state
 - Maximum cache size: 100 entries (LRU eviction)
+- Cache tier-specific responses separately (Tier 1, 2, 3 cached independently)
 
 ### Fallback Strategy
 
-When AI is unavailable or disabled:
-- Use heuristic-based component grouping (by directory structure)
-- Generate descriptions from component names and types
-- Apply standard layout algorithms without AI optimization
+When the LLM is unavailable or disabled, fall back to a heuristic interpretation of the Grounding Layer:
+- Group components by top-level directory (directory = architectural component)
+- Use directory and file names as component names (no LLM-generated descriptions)
+- Derive relationships directly from the import graph
+- Mark all components with `confidence: 'low'` and notify the user
+
+The fallback still produces a valid Architectural Model — just with less semantic richness. The diagram renders correctly either way.
 
 
 

@@ -9,8 +9,10 @@ This document specifies requirements for an AI-powered architecture diagram exte
 - **Extension**: The Kiro IDE extension being developed
 - **Architecture_Diagram**: A visual representation of the project's software architecture showing components and their relationships
 - **Diagram_Element**: A visual component in the Architecture_Diagram representing a system component (e.g., module, class, service)
-- **AI_Analyzer**: The component that analyzes the codebase and generates architecture information
-- **Diagram_Generator**: The component that creates visual diagrams from architecture information
+- **AI_Analyzer**: The component that combines static analysis (producing the Grounding_Layer) with LLM interpretation (producing the Architectural_Model) to generate architecture information
+- **Grounding_Layer**: A compact, structured representation of codebase facts (file paths, directory tree, class/function names, import relationships, inheritance) produced by static analysis and used as primary input to the LLM
+- **Architectural_Model**: The LLM-generated interpretation of the codebase architecture, including named components with roles and descriptions, their relationships, and detected architectural patterns (e.g., control plane, data access layer, MVC)
+- **Diagram_Generator**: The component that creates visual diagrams from the Architectural_Model
 - **Interactive_Navigator**: The component that handles user interactions with the diagram and file highlighting
 - **Source_File**: A code file in the user's project
 - **File_Mapping**: The association between a Diagram_Element and its corresponding Source_Files
@@ -25,11 +27,11 @@ This document specifies requirements for an AI-powered architecture diagram exte
 
 #### Acceptance Criteria
 
-1. WHEN the user activates the extension, THE AI_Analyzer SHALL scan the Project_Codebase
-2. THE AI_Analyzer SHALL identify architectural components including modules, classes, services, and packages
-3. THE AI_Analyzer SHALL detect relationships between components including dependencies, imports, and function calls
-4. THE AI_Analyzer SHALL support multiple programming languages including Python, JavaScript, TypeScript, Java, and Go
-5. WHEN the Project_Codebase contains more than 1000 files, THE AI_Analyzer SHALL complete analysis within 120 seconds
+1. WHEN the user activates the extension, THE AI_Analyzer SHALL scan the Project_Codebase using static analysis
+2. THE AI_Analyzer SHALL produce a Grounding_Layer containing: directory tree, per-file metadata (language, exported class/function names), import relationships, and inheritance relationships
+3. THE AI_Analyzer SHALL support multiple programming languages including Python, JavaScript, TypeScript, Java, and Go when building the Grounding_Layer
+4. THE AI_Analyzer SHALL send the Grounding_Layer to the LLM to produce the Architectural_Model, applying tiered enrichment (adding function signatures or file content excerpts) for files the LLM identifies as ambiguous
+5. WHEN the Project_Codebase contains more than 1000 files, THE AI_Analyzer SHALL complete static analysis and Grounding_Layer construction within 120 seconds
 6. IF the Project_Codebase cannot be analyzed, THEN THE Extension SHALL display a descriptive error message
 
 ### Requirement 2: AI-Powered Diagram Generation
@@ -38,12 +40,12 @@ This document specifies requirements for an AI-powered architecture diagram exte
 
 #### Acceptance Criteria
 
-1. WHEN the AI_Analyzer completes codebase analysis, THE Diagram_Generator SHALL create an Architecture_Diagram
-2. THE Diagram_Generator SHALL use AI to determine optimal diagram layout and component grouping
-3. THE Architecture_Diagram SHALL display components as labeled nodes
-4. THE Architecture_Diagram SHALL display relationships as directed edges between nodes
-5. THE Architecture_Diagram SHALL use visual hierarchy to represent component nesting and layers
-6. THE Diagram_Generator SHALL generate diagrams with at least three levels of abstraction (high-level, mid-level, detailed)
+1. WHEN the AI_Analyzer completes codebase analysis, THE Diagram_Generator SHALL create an Architecture_Diagram derived from the Architectural_Model
+2. THE LLM SHALL be the primary producer of the Architectural_Model, receiving the Grounding_Layer as input and returning named components with roles, descriptions, and relationships
+3. THE Architecture_Diagram SHALL display components as labeled nodes, using LLM-generated names and descriptions
+4. THE Architecture_Diagram SHALL display relationships as directed edges between nodes, reflecting LLM-identified dependencies
+5. THE Architecture_Diagram SHALL use visual hierarchy to represent architectural layers and component groupings identified by the LLM
+6. THE Diagram_Generator SHALL generate diagrams with at least three levels of abstraction (high-level, mid-level, detailed) derived from the Architectural_Model hierarchy
 7. WHEN generating the diagram, THE Diagram_Generator SHALL complete rendering within 60 seconds
 
 ### Requirement 3: Interactive Element Selection
