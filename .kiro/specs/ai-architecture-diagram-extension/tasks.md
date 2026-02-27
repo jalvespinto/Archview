@@ -83,7 +83,7 @@ This plan implements an AI-powered architecture diagram extension for Kiro IDE u
     - **Validates: Requirements 1.3**
 
 - [ ] 4. Implement Analysis Service orchestration (Phase 1: Grounding Layer)
-  - [ ] 4.0 Validate Kiro AI API integration (SPIKE)
+  - [x] 4.0 Validate Kiro AI API integration (SPIKE)
     - Create minimal POC to test Kiro AI API availability and signature
     - Verify API rate limits, token constraints, and response format
     - Document actual API shape for use in Task 6

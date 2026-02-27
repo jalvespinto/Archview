@@ -1,5 +1,6 @@
 ---
 inclusion: auto
+description: Workflow guide for working with spec tasks and implementation
 ---
 
 # Spec Workflow Guide

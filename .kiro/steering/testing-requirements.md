@@ -1,5 +1,6 @@
 ---
 inclusion: auto
+description: Testing standards including property-based testing requirements
 ---
 
 # Testing Requirements for AI Architecture Diagram Extension

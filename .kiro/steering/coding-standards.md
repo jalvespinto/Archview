@@ -1,5 +1,6 @@
 ---
 inclusion: auto
+description: TypeScript coding standards and conventions for the extension
 ---
 
 # Coding Standards for AI Architecture Diagram Extension

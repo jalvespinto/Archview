@@ -1,5 +1,6 @@
 ---
 inclusion: auto
+description: Architecture patterns and design principles for the AI Architecture Diagram extension
 ---
 
 # Architecture Patterns for AI Architecture Diagram Extension
