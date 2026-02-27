@@ -224,3 +224,9 @@ export class AIError extends Error {
     this.name = 'AIError';
   }
 }
+
+// ============================================================================
+// Validation Utilities
+// ============================================================================
+
+export { DataValidator } from './validation';
