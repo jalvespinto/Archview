@@ -148,6 +148,8 @@ export interface AnalysisConfig {
   maxDepth: number;
   languages: Language[];
   aiEnabled: boolean;
+  autoRefresh?: boolean; // Requirement 11.2
+  autoRefreshDebounce?: number; // Requirement 11.3 (milliseconds, default: 10000)
 }
 
 // ============================================================================
@@ -161,6 +163,8 @@ export type WebviewMessage =
   | { type: 'abstractionLevelChanged'; level: AbstractionLevel }
   | { type: 'exportRequested'; format: 'png' | 'svg' }
   | { type: 'refreshRequested' }
+  | { type: 'diagramOutOfSync'; timestamp: number } // Requirement 11.5
+  | { type: 'diagramRefreshed' } // Requirement 11.5
   | { type: 'error'; message: string };
 
 // ============================================================================

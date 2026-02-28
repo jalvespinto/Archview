@@ -20,6 +20,115 @@
     "codebase"
   ],
   "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "archview.generateDiagram",
+        "title": "ArchView: Generate Diagram",
+        "category": "ArchView"
+      },
+      {
+        "command": "archview.refreshDiagram",
+        "title": "ArchView: Refresh Diagram",
+        "category": "ArchView"
+      },
+      {
+        "command": "archview.exportDiagram",
+        "title": "ArchView: Export Diagram",
+        "category": "ArchView"
+      }
+    ],
+    "configuration": {
+      "title": "ArchView",
+      "properties": {
+        "archview.includePatterns": {
+          "type": "array",
+          "default": [
+            "**/*.ts",
+            "**/*.js",
+            "**/*.py",
+            "**/*.java",
+            "**/*.go"
+          ],
+          "description": "Glob patterns for files to include in analysis",
+          "items": {
+            "type": "string"
+          }
+        },
+        "archview.excludePatterns": {
+          "type": "array",
+          "default": [
+            "**/node_modules/**",
+            "**/.git/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/__pycache__/**",
+            "**/venv/**",
+            "**/.venv/**",
+            "**/target/**",
+            "**/.idea/**",
+            "**/.vscode/**"
+          ],
+          "description": "Glob patterns for files to exclude from analysis",
+          "items": {
+            "type": "string"
+          }
+        },
+        "archview.maxFiles": {
+          "type": "number",
+          "default": 1000,
+          "description": "Maximum number of files to analyze",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "archview.maxDepth": {
+          "type": "number",
+          "default": 10,
+          "description": "Maximum directory depth to traverse",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "archview.languages": {
+          "type": "array",
+          "default": [
+            "typescript",
+            "javascript",
+            "python",
+            "java",
+            "go"
+          ],
+          "description": "Programming languages to analyze",
+          "items": {
+            "type": "string",
+            "enum": [
+              "typescript",
+              "javascript",
+              "python",
+              "java",
+              "go"
+            ]
+          }
+        },
+        "archview.aiEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable AI-powered architecture interpretation"
+        },
+        "archview.autoRefresh": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically refresh diagram when files change"
+        },
+        "archview.autoRefreshDebounce": {
+          "type": "number",
+          "default": 10000,
+          "description": "Debounce time in milliseconds for auto-refresh (default: 10 seconds)",
+          "minimum": 1000,
+          "maximum": 60000
+        }
+      }
+    }
+  },
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
@@ -32,24 +141,27 @@
     "package": "npm run compile && vsce package"
   },
   "dependencies": {
-    "tree-sitter": "^0.21.0",
-    "tree-sitter-python": "^0.21.0",
-    "tree-sitter-javascript": "^0.21.0",
-    "tree-sitter-typescript": "^0.21.0",
-    "tree-sitter-java": "^0.21.0",
-    "tree-sitter-go": "^0.21.0",
     "cytoscape": "^3.28.0",
-    "cytoscape-dagre": "^2.5.0"
+    "cytoscape-dagre": "^2.5.0",
+    "tree-sitter": "^0.21.0",
+    "tree-sitter-go": "^0.21.0",
+    "tree-sitter-java": "^0.21.0",
+    "tree-sitter-javascript": "^0.21.0",
+    "tree-sitter-python": "^0.21.0",
+    "tree-sitter-typescript": "^0.21.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
+    "@types/cytoscape": "^3.21.9",
     "@types/jest": "^29.5.0",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.1.0",
-    "fast-check": "^3.15.0",
-    "typescript": "^5.3.0",
+    "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
-    "eslint": "^8.0.0"
+    "canvas": "^3.2.1",
+    "eslint": "^8.0.0",
+    "fast-check": "^3.15.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^30.2.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.3.0"
   }
 }

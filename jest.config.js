@@ -3,6 +3,20 @@ module.exports = {
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
   testMatch: ['**/__tests__/**/*.test.ts', '**/*.test.ts'],
+  projects: [
+    {
+      displayName: 'node',
+      testEnvironment: 'node',
+      testMatch: ['**/__tests__/**/*.test.ts', '!**/__tests__/**/*.browser.test.ts'],
+      preset: 'ts-jest'
+    },
+    {
+      displayName: 'jsdom',
+      testEnvironment: 'jsdom',
+      testMatch: ['**/__tests__/**/*.browser.test.ts'],
+      preset: 'ts-jest'
+    }
+  ],
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/**/*.test.ts',

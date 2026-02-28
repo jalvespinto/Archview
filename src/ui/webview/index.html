@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+  <title>Architecture Diagram</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="diagram-container"></div>
+  <div id="controls">
+    <div id="sync-indicator" class="sync-indicator" style="display: none;">
+      <span class="sync-icon">⚠</span>
+      <span class="sync-text">Diagram out of sync</span>
+    </div>
+    <div class="control-group">
+      <label>Zoom</label>
+      <button id="zoom-in" title="Zoom In">+</button>
+      <button id="zoom-out" title="Zoom Out">-</button>
+      <button id="fit-view" title="Fit to View">Fit</button>
+    </div>
+    <div class="control-group">
+      <label>Abstraction Level</label>
+      <select id="abstraction-level">
+        <option value="1">Overview</option>
+        <option value="2" selected>Module</option>
+        <option value="3">Detailed</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <label>Export</label>
+      <button id="export-png" title="Export as PNG">PNG</button>
+      <button id="export-svg" title="Export as SVG">SVG</button>
+    </div>
+    <div class="control-group">
+      <button id="refresh" title="Refresh Diagram">Refresh</button>
+    </div>
+  </div>
+  <div id="loading" style="display: none;">
+    <div class="spinner"></div>
+    <p>Loading diagram...</p>
+  </div>
+  <div id="error" style="display: none;">
+    <p class="error-message"></p>
+  </div>
+  <script src="webview.js"></script>
+</body>
+</html>

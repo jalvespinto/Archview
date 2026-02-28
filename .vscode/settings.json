@@ -1,0 +1,13 @@
+{
+    "kiroAgent.trustedCommands": [
+        "npm *",
+        "ls *",
+        "grep *",
+        "npx *",
+        "cat *",
+        "node *",
+        "wc *",
+        "tail *",
+        "head *"
+    ]
+}

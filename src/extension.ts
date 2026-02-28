@@ -3,15 +3,35 @@
  * Requirements: 8.1, 8.6
  */
 
-// Placeholder for extension activation
-// Will be implemented in task 12.1
+import { ExtensionController } from './ExtensionController';
 
-export function activate(context: any): void {
+// Global extension controller instance
+let controller: ExtensionController | null = null;
+
+/**
+ * Activate extension
+ * Requirements: 8.1, 8.6
+ */
+export async function activate(context: any): Promise<void> {
   console.log('ArchView extension activating...');
-  // TODO: Implement in task 12.1
+  
+  controller = new ExtensionController();
+  await controller.activate(context);
+  
+  console.log('ArchView extension activated successfully');
 }
 
-export function deactivate(): void {
+/**
+ * Deactivate extension
+ * Requirements: 8.1
+ */
+export async function deactivate(): Promise<void> {
   console.log('ArchView extension deactivating...');
-  // TODO: Implement in task 12.1
+  
+  if (controller) {
+    await controller.deactivate();
+    controller = null;
+  }
+  
+  console.log('ArchView extension deactivated successfully');
 }
