@@ -178,26 +178,55 @@ export class ExtensionController {
    * Requirements: 8.1
    */
   private registerCommands(): void {
-    const commands: Command[] = [
-      {
-        command: 'archview.generateDiagram',
-        callback: () => this.generateDiagram()
-      },
-      {
-        command: 'archview.refreshDiagram',
-        callback: () => this.refreshDiagram()
-      },
-      {
-        command: 'archview.exportDiagram',
-        callback: (format: 'png' | 'svg') => this.exportDiagram(format)
+    console.log('=== registerCommands called ===');
+    const vscode = require('vscode');
+    
+    // Test command to verify registration works
+    const testDisposable = vscode.commands.registerCommand(
+      'archview.test',
+      () => {
+        console.log('=== TEST COMMAND WORKS ===');
+        vscode.window.showInformationMessage('ArchView test command works!');
       }
-    ];
+    );
+    
+    // Register generateDiagram
+    const generateDisposable = vscode.commands.registerCommand(
+      'archview.generateDiagram',
+      async () => {
+        console.log('=== archview.generateDiagram command triggered ===');
+        vscode.window.showInformationMessage('Generate Diagram command triggered!');
+        await this.generateDiagram();
+      }
+    );
+    
+    // Register refreshDiagram
+    const refreshDisposable = vscode.commands.registerCommand(
+      'archview.refreshDiagram',
+      async () => {
+        console.log('=== archview.refreshDiagram command triggered ===');
+        await this.refreshDiagram();
+      }
+    );
+    
+    // Register exportDiagram
+    const exportDisposable = vscode.commands.registerCommand(
+      'archview.exportDiagram',
+      async (format: 'png' | 'svg') => {
+        console.log('=== archview.exportDiagram command triggered ===');
+        await this.exportDiagram(format);
+      }
+    );
 
-    // TODO: Use actual Kiro command registration API
-    for (const cmd of commands) {
-      console.log(`Registered command: ${cmd.command}`);
-      // In production: vscode.commands.registerCommand(cmd.command, cmd.callback)
+    if (this.context) {
+      this.context.subscriptions.push(testDisposable);
+      this.context.subscriptions.push(generateDisposable);
+      this.context.subscriptions.push(refreshDisposable);
+      this.context.subscriptions.push(exportDisposable);
     }
+    
+    console.log('Commands registered successfully');
+    console.log('Try running: archview.test');
   }
 
   /**
@@ -359,10 +388,15 @@ export class ExtensionController {
    * Requirements: 2.1, 3.1, 6.5, 11.1
    */
   async generateDiagram(): Promise<void> {
+    console.log('=== generateDiagram called ===');
     try {
       // Get workspace root path
+      console.log('Getting workspace root...');
       const rootPath = await this.getWorkspaceRoot();
+      console.log('Workspace root:', rootPath);
+      
       if (!rootPath) {
+        console.error('No workspace root found');
         throw new AnalysisError(
           'No workspace folder open',
           'Please open a folder or workspace to analyze',
@@ -375,8 +409,10 @@ export class ExtensionController {
 
       // Get analysis configuration
       const config = this.getAnalysisConfig(rootPath);
+      console.log('Analysis config:', config);
 
       // Phase 1: Build grounding layer (Requirements: 2.1)
+      console.log('Phase 1: Building grounding layer...');
       const progressCallback: ProgressCallback = (percentage, message) => {
         console.log(`Progress: ${percentage}% - ${message}`);
       };
@@ -389,21 +425,26 @@ export class ExtensionController {
         cancellationToken,
         timeoutMs: 120000
       });
+      console.log('Grounding layer built, files:', this.state.groundingData?.files.length);
 
       // Phase 2: Interpret with AI (Requirements: 2.1, 2.2)
+      console.log('Phase 2: Interpreting with AI...');
       if (config.aiEnabled) {
         this.state.architecturalModel = await this.aiService.interpretArchitecture(
           this.state.groundingData
         );
       } else {
         // Use fallback heuristic interpretation
+        console.log('Using fallback heuristic model...');
         this.state.architecturalModel = await this.aiService['buildHeuristicModel'](
           this.state.groundingData,
           0 // inferenceTimeMs for fallback
         );
       }
+      console.log('Architectural model created, components:', this.state.architecturalModel?.components.length);
 
       // Phase 3: Generate diagram (Requirements: 2.1)
+      console.log('Phase 3: Generating diagram...');
       if (!this.state.architecturalModel) {
         throw new AnalysisError(
           'Failed to generate architectural model',
@@ -416,8 +457,10 @@ export class ExtensionController {
         this.state.architecturalModel,
         this.state.abstractionLevel
       );
+      console.log('Diagram data generated, nodes:', diagramData.nodes.length);
 
       // Phase 4: Display in webview (Requirements: 2.1)
+      console.log('Phase 4: Creating webview...');
       this.webviewManager.createWebview();
       this.webviewManager.updateDiagram(diagramData);
 
@@ -427,12 +470,16 @@ export class ExtensionController {
       // Save state
       await this.saveState();
 
-      console.log('Diagram generated successfully');
+      console.log('=== Diagram generated successfully ===');
     } catch (error) {
+      console.error('=== Error in generateDiagram ===', error);
       if (this.errorHandler && error instanceof AnalysisError) {
         this.errorHandler.handleAnalysisError(error);
       } else {
         console.error('Failed to generate diagram:', error);
+        // Show error to user
+        const vscode = require('vscode');
+        vscode.window.showErrorMessage(`Failed to generate diagram: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
   }

@@ -6,25 +6,11 @@
 
 import { DiagramData, WebviewMessage, AbstractionLevel } from '../types';
 
-// Kiro webview API types (to be provided by Kiro runtime)
-interface Webview {
-  postMessage(message: WebviewMessage): Promise<boolean>;
-  onDidReceiveMessage(handler: (message: WebviewMessage) => void): void;
-  dispose(): void;
-}
-
-interface WebviewPanel {
-  webview: Webview;
-  dispose(): void;
-  reveal(): void;
-  onDidDispose(handler: () => void): void;
-}
-
 /**
  * WebviewManager handles webview lifecycle and communication
  */
 export class WebviewManager {
-  private panel: WebviewPanel | null = null;
+  private panel: any = null;
   private messageHandlers: Map<string, (message: WebviewMessage) => void> = new Map();
   private isDisposed = false;
 
@@ -32,15 +18,14 @@ export class WebviewManager {
    * Create and initialize webview panel
    * Requirements: 2.1
    */
-  createWebview(): WebviewPanel {
+  createWebview(): any {
     if (this.panel) {
       // Reuse existing panel
       this.panel.reveal();
       return this.panel;
     }
 
-    // TODO: Use actual Kiro webview API when available
-    // For now, create a mock structure
+    // Create webview panel using Kiro/VS Code API
     this.panel = this.createWebviewPanel();
     this.isDisposed = false;
 
@@ -132,38 +117,27 @@ export class WebviewManager {
   // ============================================================================
 
   /**
-   * Create webview panel using Kiro API
+   * Create webview panel using Kiro/VS Code API
    */
-  private createWebviewPanel(): WebviewPanel {
-    // TODO: Replace with actual Kiro webview API
-    // This is a placeholder structure
-    const mockWebview: Webview = {
-      postMessage: async (message: WebviewMessage) => {
-        console.log('Mock postMessage:', message);
-        return true;
-      },
-      onDidReceiveMessage: (handler: (message: WebviewMessage) => void) => {
-        // Store handler for mock implementation
-      },
-      dispose: () => {
-        // Cleanup
+  private createWebviewPanel(): any {
+    const vscode = require('vscode');
+    
+    // Create webview panel using Kiro/VS Code API
+    // ViewColumn.One = 1 (show in first editor column)
+    const panel = vscode.window.createWebviewPanel(
+      'archview',                    // Identifies the type of webview
+      'Architecture Diagram',        // Title shown in panel
+      vscode.ViewColumn.One,         // Show in first editor column
+      {
+        enableScripts: true,         // Enable JavaScript in webview
+        retainContextWhenHidden: true // Keep webview state when hidden
       }
-    };
+    );
 
-    const mockPanel: WebviewPanel = {
-      webview: mockWebview,
-      dispose: () => {
-        mockWebview.dispose();
-      },
-      reveal: () => {
-        console.log('Mock reveal webview');
-      },
-      onDidDispose: (handler: () => void) => {
-        // Store disposal handler
-      }
-    };
+    // Set webview HTML content
+    panel.webview.html = this.getWebviewContent();
 
-    return mockPanel;
+    return panel;
   }
 
   /**

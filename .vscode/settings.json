@@ -9,6 +9,9 @@
         "wc *",
         "tail *",
         "head *",
-        "timeout *"
+        "timeout *",
+        "which *",
+        "kiro *",
+        "pwd *"
     ]
 }

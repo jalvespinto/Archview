@@ -22,6 +22,7 @@
     "theme": "dark"
   },
   "engines": {
+    "vscode": "^1.80.0",
     "kiro": "^1.0.0",
     "node": ">=18.0.0"
   },
@@ -49,9 +50,7 @@
     "multi-language"
   ],
   "activationEvents": [
-    "onCommand:archview.generateDiagram",
-    "onCommand:archview.refreshDiagram",
-    "onCommand:archview.exportDiagram"
+    "*"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -177,7 +176,10 @@
     "package": "npm run compile && vsce package",
     "vscode:prepublish": "npm run compile",
     "pretest": "npm run compile",
-    "ci": "npm run lint && npm run typecheck && npm run test:coverage"
+    "ci": "npm run lint && npm run typecheck && npm run test:coverage",
+    "create-test-projects": "./scripts/create-test-project.sh",
+    "dev": "npm run compile && npm run create-test-projects",
+    "install-local": "npm run package && echo 'Install the generated .vsix file in Kiro IDE: Extensions > Install from VSIX'"
   },
   "dependencies": {
     "cytoscape": "^3.28.0",

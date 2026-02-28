@@ -2,8 +2,11 @@
 
 [![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/kiro/archview)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Built with Kiro](https://img.shields.io/badge/built%20with-Kiro%20AI-purple.svg)](https://kiro.ai)
 
 Automatically generate interactive architecture diagrams from your codebase using AI. ArchView analyzes your project structure, uses AI to understand architectural patterns, and creates beautiful, navigable visualizations that help you understand and document your software architecture.
+
+> **Built entirely by Kiro AI** - This extension was created through AI-assisted development. The developer provided requirements and specifications only, while Kiro AI handled the complete implementation, including architecture design, code generation, testing, and documentation.
 
 ## ✨ Features
 
@@ -220,6 +223,31 @@ Share architectural insights with team members using visual representations.
 - Check Kiro AI service is available
 - Extension falls back to basic analysis if AI is unavailable
 
+## 🧪 Development & Testing
+
+Want to test or develop the extension locally?
+
+- **Quick Testing Guide**: [TESTING_GUIDE.md](TESTING_GUIDE.md) - Get started in 5 minutes
+- **Development Guide**: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) - Full development workflow
+- **Create Test Projects**: Run `./scripts/create-test-project.sh` to generate sample projects
+
+### Quick Start for Developers
+
+```bash
+# Install dependencies
+npm install
+
+# Create test projects
+./scripts/create-test-project.sh
+
+# Run in debug mode
+# Press F5 in Kiro IDE
+
+# Or package and install
+npm run package
+# Then install the .vsix file in Kiro IDE
+```
+
 ## 🤝 Contributing
 
 We welcome contributions! Please see our contributing guidelines for details.
@@ -249,6 +277,22 @@ Built with:
 - [Tree-sitter](https://tree-sitter.github.io/) - Code parsing
 - Kiro AI API - Architecture interpretation
 
+## 🤖 About This Project
+
+This entire extension was built by Kiro AI through AI-assisted development. The human developer provided:
+- Initial concept and requirements
+- Feature specifications and use cases
+- Feedback and refinement during development
+
+Kiro AI handled:
+- Complete architecture design and implementation
+- All TypeScript code generation (2000+ lines)
+- Comprehensive test suite with property-based testing
+- Full documentation and guides
+- Build configuration and tooling setup
+
+This project demonstrates the power of AI-assisted development for creating production-ready VS Code extensions with minimal manual coding.
+
 ---
 
-Made with ❤️ for developers who love understanding their code
+Made with ❤️ by Kiro AI for developers who love understanding their code
