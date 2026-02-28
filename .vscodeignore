@@ -1,0 +1,57 @@
+# Source files
+src/**
+.vscode/**
+.vscode-test/**
+
+# Build artifacts
+*.map
+*.ts
+!dist/**/*.js
+
+# Tests
+**/__tests__/**
+**/*.test.ts
+**/*.spec.ts
+test/**
+coverage/**
+.nyc_output/**
+
+# Configuration
+.eslintrc.json
+tsconfig.json
+tsconfig.tsbuildinfo
+jest.config.js
+
+# CI/CD
+.github/**
+
+# Documentation (keep only essential docs)
+docs/**
+!docs/QUICK_START.md
+
+# Spec files
+.kiro/specs/**
+
+# Git
+.git/**
+.gitignore
+.gitattributes
+
+# Dependencies
+node_modules/**
+
+# Misc
+*.log
+*.vsix
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Keep these files
+!README.md
+!CHANGELOG.md
+!LICENSE
+!images/**
+!dist/**

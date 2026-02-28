@@ -1,12 +1,18 @@
 /**
  * Property-based tests for DiagramGenerator
- * Tests Properties 6, 7, and 8 from the design document
+ * Tests Properties 6, 7, 8, and 28 from the design document
  */
 
 import * as fc from 'fast-check';
 import { DiagramGenerator } from '../DiagramGenerator';
-import { AbstractionLevel } from '../../types';
-import { arbitraryArchitecturalModel } from './arbitraries';
+import { AbstractionLevel, Language } from '../../types';
+import {
+  arbitraryArchitecturalModel,
+  arbitraryLanguage,
+  arbitraryAbstractionLevel,
+  arbitraryArchitecturalRelationship,
+  arbitraryArchitecturalModelMetadata,
+} from './arbitraries';
 
 describe('DiagramGenerator Property Tests', () => {
   let generator: DiagramGenerator;
@@ -283,4 +289,247 @@ describe('DiagramGenerator Property Tests', () => {
       );
     });
   });
+
+  /**
+   * Property 28: Multi-Language Diagram Integration
+   * **Validates: Requirements 12.3**
+   *
+   * For any project containing source files in multiple programming languages,
+   * the generated diagram should include components from all detected languages.
+   */
+  describe('Property 28: Multi-Language Diagram Integration', () => {
+    it('should include components from all languages in a single diagram', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          // Generate a model with components from multiple languages
+          fc
+            .array(arbitraryLanguage(), { minLength: 2, maxLength: 5 })
+            .chain((languages) => {
+              // Create at least one component per language
+              const componentsPerLanguage = languages.map((lang, idx) =>
+                fc.record({
+                  id: fc.constant(`component-${lang}-${idx}`),
+                  name: fc.constant(`${lang}Component${idx}`),
+                  description: fc.lorem({ maxCount: 10 }),
+                  role: fc.constantFrom(
+                    'control plane',
+                    'data access layer',
+                    'auth module'
+                  ),
+                  filePaths: fc.array(
+                    fc
+                      .tuple(
+                        fc.stringMatching(/^[a-z]+$/),
+                        fc.constant(getExtensionForLanguage(lang))
+                      )
+                      .map(([name, ext]) => `src/${name}.${ext}`),
+                    { minLength: 1, maxLength: 3 }
+                  ),
+                  abstractionLevel: arbitraryAbstractionLevel(),
+                  subComponents: fc.constant([]),
+                  parent: fc.constant(null),
+                })
+              );
+
+              return fc
+                .tuple(...componentsPerLanguage)
+                .chain((components) => {
+                  const componentIds = components.map((c) => c.id);
+                  return fc.record({
+                    components: fc.constant(components),
+                    relationships: fc.array(
+                      arbitraryArchitecturalRelationship(componentIds),
+                      { maxLength: 5 }
+                    ),
+                    patterns: fc.constant([]),
+                    metadata: arbitraryArchitecturalModelMetadata(),
+                  });
+                });
+            }),
+          async (model) => {
+            const diagramData = await generator.generateDiagram(model);
+
+            // Extract unique languages from components
+            const languagesInModel = new Set<Language>();
+            for (const component of model.components) {
+              // Infer language from file paths
+              for (const filePath of component.filePaths) {
+                const ext = filePath.split('.').pop()?.toLowerCase();
+                const language = getLanguageFromExtension(ext || '');
+                languagesInModel.add(language);
+              }
+            }
+
+            // Extract unique languages from diagram nodes
+            const languagesInDiagram = new Set(
+              diagramData.nodes.map((n) => n.language)
+            );
+
+            // All languages from the model should be present in the diagram
+            for (const language of languagesInModel) {
+              expect(languagesInDiagram.has(language)).toBe(true);
+            }
+
+            // Verify all components are included (none filtered out by language)
+            expect(diagramData.nodes.length).toBe(model.components.length);
+          }
+        ),
+        { numRuns: 100 }
+      );
+    });
+
+    it('should handle unknown file types as generic components', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.record({
+            components: fc.array(
+              fc.record({
+                id: fc.uuid(),
+                name: fc.stringMatching(/^[A-Z][a-zA-Z]+$/),
+                description: fc.lorem({ maxCount: 10 }),
+                role: fc.constantFrom('module', 'service', 'component'),
+                // Use unknown file extensions
+                filePaths: fc.array(
+                  fc
+                    .tuple(
+                      fc.stringMatching(/^[a-z]+$/),
+                      fc.constantFrom('xyz', 'abc', 'unknown', 'custom')
+                    )
+                    .map(([name, ext]) => `src/${name}.${ext}`),
+                  { minLength: 1, maxLength: 3 }
+                ),
+                abstractionLevel: arbitraryAbstractionLevel(),
+                subComponents: fc.constant([]),
+                parent: fc.constant(null),
+              }),
+              { minLength: 1, maxLength: 5 }
+            ),
+            relationships: fc.constant([]),
+            patterns: fc.constant([]),
+            metadata: arbitraryArchitecturalModelMetadata(),
+          }),
+          async (model) => {
+            const diagramData = await generator.generateDiagram(model);
+
+            // All components with unknown file types should be included
+            expect(diagramData.nodes.length).toBe(model.components.length);
+
+            // All nodes with unknown file types should have Language.Unknown
+            for (const node of diagramData.nodes) {
+              expect(node.language).toBe(Language.Unknown);
+            }
+
+            // Nodes should still have valid styling
+            for (const node of diagramData.nodes) {
+              expect(node.style).toBeDefined();
+              expect(node.style.color).toBeDefined();
+              expect(node.style.shape).toBeDefined();
+              expect(node.style.size).toBeGreaterThan(0);
+            }
+          }
+        ),
+        { numRuns: 100 }
+      );
+    });
+
+    it('should preserve all components in multi-language projects', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          arbitraryArchitecturalModel(),
+          async (model) => {
+            const diagramData = await generator.generateDiagram(model);
+
+            // Count components by language in the model
+            const componentsByLanguage = new Map<Language, number>();
+            for (const component of model.components) {
+              for (const filePath of component.filePaths) {
+                const ext = filePath.split('.').pop()?.toLowerCase();
+                const language = getLanguageFromExtension(ext || '');
+                componentsByLanguage.set(
+                  language,
+                  (componentsByLanguage.get(language) || 0) + 1
+                );
+              }
+            }
+
+            // All components should be present in the diagram
+            expect(diagramData.nodes.length).toBe(model.components.length);
+
+            // Verify each component is represented
+            for (const component of model.components) {
+              const node = diagramData.nodes.find((n) => n.id === component.id);
+              expect(node).toBeDefined();
+              expect(node?.filePaths).toEqual(component.filePaths);
+            }
+          }
+        ),
+        { numRuns: 100 }
+      );
+    });
+
+    it('should add language icons to all nodes', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          arbitraryArchitecturalModel(),
+          async (model) => {
+            const diagramData = await generator.generateDiagram(model);
+
+            // All nodes should have a language icon in their style
+            for (const node of diagramData.nodes) {
+              expect(node.style.languageIcon).toBeDefined();
+              expect(typeof node.style.languageIcon).toBe('string');
+              if (node.style.languageIcon) {
+                expect(node.style.languageIcon.length).toBeGreaterThan(0);
+              }
+            }
+          }
+        ),
+        { numRuns: 100 }
+      );
+    });
+  });
 });
+
+/**
+ * Helper function to get file extension for a language
+ */
+function getExtensionForLanguage(language: Language): string {
+  switch (language) {
+    case Language.Python:
+      return 'py';
+    case Language.JavaScript:
+      return 'js';
+    case Language.TypeScript:
+      return 'ts';
+    case Language.Java:
+      return 'java';
+    case Language.Go:
+      return 'go';
+    case Language.Unknown:
+    default:
+      return 'txt';
+  }
+}
+
+/**
+ * Helper function to get language from file extension
+ */
+function getLanguageFromExtension(ext: string): Language {
+  switch (ext) {
+    case 'py':
+      return Language.Python;
+    case 'js':
+    case 'jsx':
+      return Language.JavaScript;
+    case 'ts':
+    case 'tsx':
+      return Language.TypeScript;
+    case 'java':
+      return Language.Java;
+    case 'go':
+      return Language.Go;
+    default:
+      return Language.Unknown;
+  }
+}
+

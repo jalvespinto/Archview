@@ -36,6 +36,8 @@ import { FileScanner, ScanOptions } from './FileScanner';
 import { ParserManager } from './ParserManager';
 import { ComponentExtractor } from './ComponentExtractor';
 import { RelationshipExtractor } from './RelationshipExtractor';
+import { MemoryManager, MemoryLimitExceededError } from '../performance/MemoryManager';
+import { AnalysisOptimizer } from '../performance/AnalysisOptimizer';
 
 /**
  * Progress callback for tracking analysis progress
@@ -80,6 +82,8 @@ export class AnalysisService {
   private cache: Map<string, CacheEntry>;
   private lastProgressUpdate: number = 0;
   private readonly PROGRESS_UPDATE_INTERVAL_MS = 5000; // 5 seconds
+  private memoryManager: MemoryManager;
+  private optimizer: AnalysisOptimizer;
 
   constructor() {
     this.fileScanner = new FileScanner();
@@ -87,6 +91,8 @@ export class AnalysisService {
     this.componentExtractor = new ComponentExtractor();
     this.relationshipExtractor = new RelationshipExtractor();
     this.cache = new Map();
+    this.memoryManager = new MemoryManager();
+    this.optimizer = new AnalysisOptimizer();
   }
 
   /**
@@ -112,18 +118,27 @@ export class AnalysisService {
     const startTime = Date.now();
     this.lastProgressUpdate = startTime;
 
-    // Check cache first
-    const cacheKey = this.generateCacheKey(rootPath, config);
-    const cachedResult = await this.checkCache(cacheKey, rootPath);
-    if (cachedResult) {
-      this.reportProgress(100, 'Using cached analysis results', progressCallback);
-      return cachedResult;
-    }
-
-    // Initialize parser manager
-    await this.parserManager.initialize();
+    // Start memory monitoring (Requirements: 9.1)
+    this.memoryManager.setBaseline();
+    const stopMonitoring = this.memoryManager.startAnalysisMonitoring((usageMB) => {
+      console.warn(`Memory limit exceeded during analysis: ${usageMB.toFixed(2)}MB > 500MB`);
+      throw new MemoryLimitExceededError(
+        `Analysis memory limit exceeded: ${usageMB.toFixed(2)}MB > 500MB`
+      );
+    });
 
     try {
+      // Check cache first
+      const cacheKey = this.generateCacheKey(rootPath, config);
+      const cachedResult = await this.checkCache(cacheKey, rootPath);
+      if (cachedResult) {
+        this.reportProgress(100, 'Using cached analysis results', progressCallback);
+        return cachedResult;
+      }
+
+      // Initialize parser manager
+      await this.parserManager.initialize();
+
       // Phase 1: Scan file system (10% of progress)
       this.checkCancellation(cancellationToken);
       this.checkTimeout(startTime, timeoutMs, 'File scanning');
@@ -149,31 +164,60 @@ export class AnalysisService {
       const fileGroundingDataMap = new Map<string, FileGroundingData>();
       const totalFiles = scanResult.files.length;
 
-      for (let i = 0; i < scanResult.files.length; i++) {
+      // Batch read files for better performance (Requirements: 9.3)
+      const filePaths = scanResult.files.map(f => f.absolutePath);
+      const fileContents = await this.optimizer.batchReadFiles(filePaths);
+
+      // Parse files using parallel processing (Requirements: 9.3)
+      interface ParseTaskResult {
+        scannedFile: any;
+        sourceCode: string;
+        ast: any;
+      }
+
+      const parseResults = await this.optimizer.parseFilesInParallel<ParseTaskResult>(
+        scanResult.files.map(f => f.path),
+        async (filePath) => {
+          const scannedFile = scanResult.files.find(f => f.path === filePath);
+          if (!scannedFile) {
+            throw new Error(`File not found: ${filePath}`);
+          }
+
+          const sourceCode = fileContents.get(scannedFile.absolutePath) || '';
+          
+          // Use incremental parsing (Requirements: 9.3)
+          const ast = await this.optimizer.parseIncremental(
+            scannedFile.path,
+            sourceCode,
+            async (content) => {
+              return this.parserManager.parseFile(
+                scannedFile.path,
+                content,
+                scannedFile.language
+              );
+            }
+          );
+
+          return { scannedFile, sourceCode, ast };
+        }
+      );
+
+      // Process parse results
+      for (let i = 0; i < parseResults.length; i++) {
         this.checkCancellation(cancellationToken);
         this.checkTimeout(startTime, timeoutMs, 'File parsing');
 
-        const scannedFile = scanResult.files[i];
+        const { scannedFile, sourceCode, ast } = parseResults[i];
         
         // Report progress every 5 seconds or every 10% of files
         const progressPercentage = 10 + Math.floor((i / totalFiles) * 60);
         if (i % Math.max(1, Math.floor(totalFiles / 10)) === 0) {
           this.reportProgress(
             progressPercentage,
-            `Parsing file ${i + 1}/${totalFiles}: ${scannedFile.path}`,
+            `Processing file ${i + 1}/${totalFiles}: ${scannedFile.path}`,
             progressCallback
           );
         }
-
-        // Read file content
-        const sourceCode = await fs.readFile(scannedFile.absolutePath, 'utf-8');
-
-        // Parse file
-        const ast = await this.parserManager.parseFile(
-          scannedFile.path,
-          sourceCode,
-          scannedFile.language
-        );
 
         // Skip files with critical parse errors
         if (this.parserManager.hasErrors(ast) && ast.parseErrors.length > 0) {
@@ -260,7 +304,13 @@ export class AnalysisService {
       if (error instanceof CancellationError) {
         throw error;
       }
+      if (error instanceof MemoryLimitExceededError) {
+        throw error;
+      }
       throw new Error(`Failed to build grounding layer: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      // Stop memory monitoring
+      stopMonitoring();
     }
   }
 
@@ -524,6 +574,9 @@ export class AnalysisService {
         this.cache.delete(key);
       }
     }
+    
+    // Clear incremental cache for this file
+    this.optimizer.clearIncrementalCacheForFile(filePath);
   }
 
 
@@ -571,6 +624,8 @@ export class AnalysisService {
   dispose(): void {
     this.parserManager.dispose();
     this.cache.clear();
+    this.memoryManager.dispose();
+    this.optimizer.dispose();
   }
 }
 

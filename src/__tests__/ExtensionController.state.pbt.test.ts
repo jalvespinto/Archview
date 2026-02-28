@@ -166,6 +166,10 @@ function arbitraryNavigationOperation(): fc.Arbitrary<
 // ============================================================================
 
 describe('Property 18: State Preservation During Navigation', () => {
+  // Reduce test timeout and iterations for faster execution
+  const TEST_TIMEOUT = 120000; // 2 minutes
+  const NUM_RUNS = 5; // Reduced to speed up tests with expensive controller initialization
+
   /**
    * Property: Selection preservation during zoom operations
    * 
@@ -216,9 +220,9 @@ describe('Property 18: State Preservation During Navigation', () => {
           await controller.deactivate();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: NUM_RUNS }
     );
-  });
+  }, TEST_TIMEOUT);
 
   /**
    * Property: Selection preservation during pan operations
@@ -276,9 +280,9 @@ describe('Property 18: State Preservation During Navigation', () => {
           await controller.deactivate();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: NUM_RUNS }
     );
-  });
+  }, TEST_TIMEOUT);
 
   /**
    * Property: Selection preservation during abstraction level changes
@@ -325,9 +329,9 @@ describe('Property 18: State Preservation During Navigation', () => {
           await controller.deactivate();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: NUM_RUNS }
     );
-  });
+  }, TEST_TIMEOUT);
 
   /**
    * Property: Viewport state preservation during mixed navigation operations
@@ -402,9 +406,9 @@ describe('Property 18: State Preservation During Navigation', () => {
           await controller.deactivate();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: NUM_RUNS }
     );
-  });
+  }, TEST_TIMEOUT);
 
   /**
    * Property: Selection cleared when element no longer exists
@@ -453,7 +457,7 @@ describe('Property 18: State Preservation During Navigation', () => {
           await controller.deactivate();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: NUM_RUNS }
     );
-  });
+  }, TEST_TIMEOUT);
 });

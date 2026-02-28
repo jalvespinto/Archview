@@ -30,10 +30,13 @@ export class DiagramRenderer {
   private onElementClickHandler: ((elementId: string) => void) | null = null;
   private onElementHoverHandler: ((elementId: string) => void) | null = null;
   private selectedElementId: string | null = null;
+  private zoomDebounceTimer: any = null;
+  private panDebounceTimer: any = null;
+  private readonly DEBOUNCE_DELAY_MS = 100; // 100ms debounce
 
   /**
    * Initialize Cytoscape instance in browser DOM
-   * Requirements: 2.1
+   * Requirements: 2.1, 2.7
    */
   initialize(container: BrowserHTMLElement): void {
     this.container = container;
@@ -44,11 +47,13 @@ export class DiagramRenderer {
       minZoom: 0.25,
       maxZoom: 4.0,
       wheelSensitivity: 0.2,
-      // Performance optimization for large graphs
-      hideEdgesOnViewport: true,
-      textureOnViewport: true,
-      motionBlur: false,
-      pixelRatio: 'auto'
+      // Performance optimizations (Requirements: 2.7)
+      hideEdgesOnViewport: true,      // Hide edges during viewport changes
+      textureOnViewport: true,         // Use texture during viewport changes
+      motionBlur: false,               // Disable motion blur for performance
+      pixelRatio: 'auto',
+      // Enable virtualization for large graphs (Requirements: 2.7)
+      hideLabelsOnViewport: true       // Hide labels during pan/zoom
     });
 
     // Set up event handlers
@@ -70,14 +75,26 @@ export class DiagramRenderer {
     // Clear existing elements
     this.cy.elements().remove();
     
-    // Add new elements
-    this.cy.add(elements);
+    // Progressive rendering: Add nodes first, then edges (Requirements: 2.7)
+    const nodes = elements.filter(e => e.group === 'nodes');
+    const edges = elements.filter(e => e.group === 'edges');
     
-    // Apply layout
-    this.updateLayout(data.layout.algorithm);
+    // Add nodes immediately
+    this.cy.add(nodes);
     
-    // Fit to view
-    this.fitToView();
+    // Use requestAnimationFrame for smooth rendering (Requirements: 2.7)
+    requestAnimationFrame(() => {
+      if (!this.cy) return;
+      
+      // Add edges after nodes are rendered
+      this.cy.add(edges);
+      
+      // Apply layout
+      this.updateLayout(data.layout.algorithm);
+      
+      // Fit to view
+      this.fitToView();
+    });
   }
 
   /**
@@ -131,36 +148,66 @@ export class DiagramRenderer {
 
   /**
    * Zoom in
-   * Requirements: 5.2
+   * Requirements: 5.2, 2.7
    */
   zoomIn(): void {
     if (!this.cy) return;
-    const currentZoom = this.cy.zoom();
-    const newZoom = Math.min(currentZoom * 1.2, 4.0);
-    this.cy.zoom({
-      level: newZoom,
-      renderedPosition: {
-        x: this.cy.width() / 2,
-        y: this.cy.height() / 2
-      }
-    });
+    
+    // Debounce zoom updates (Requirements: 2.7)
+    if (this.zoomDebounceTimer) {
+      clearTimeout(this.zoomDebounceTimer);
+    }
+    
+    this.zoomDebounceTimer = setTimeout(() => {
+      if (!this.cy) return;
+      
+      const currentZoom = this.cy.zoom();
+      const newZoom = Math.min(currentZoom * 1.2, 4.0);
+      
+      // Use requestAnimationFrame for smooth animation (Requirements: 2.7)
+      requestAnimationFrame(() => {
+        if (!this.cy) return;
+        this.cy.zoom({
+          level: newZoom,
+          renderedPosition: {
+            x: this.cy.width() / 2,
+            y: this.cy.height() / 2
+          }
+        });
+      });
+    }, this.DEBOUNCE_DELAY_MS);
   }
 
   /**
    * Zoom out
-   * Requirements: 5.2
+   * Requirements: 5.2, 2.7
    */
   zoomOut(): void {
     if (!this.cy) return;
-    const currentZoom = this.cy.zoom();
-    const newZoom = Math.max(currentZoom / 1.2, 0.25);
-    this.cy.zoom({
-      level: newZoom,
-      renderedPosition: {
-        x: this.cy.width() / 2,
-        y: this.cy.height() / 2
-      }
-    });
+    
+    // Debounce zoom updates (Requirements: 2.7)
+    if (this.zoomDebounceTimer) {
+      clearTimeout(this.zoomDebounceTimer);
+    }
+    
+    this.zoomDebounceTimer = setTimeout(() => {
+      if (!this.cy) return;
+      
+      const currentZoom = this.cy.zoom();
+      const newZoom = Math.max(currentZoom / 1.2, 0.25);
+      
+      // Use requestAnimationFrame for smooth animation (Requirements: 2.7)
+      requestAnimationFrame(() => {
+        if (!this.cy) return;
+        this.cy.zoom({
+          level: newZoom,
+          renderedPosition: {
+            x: this.cy.width() / 2,
+            y: this.cy.height() / 2
+          }
+        });
+      });
+    }, this.DEBOUNCE_DELAY_MS);
   }
 
   /**
@@ -174,10 +221,19 @@ export class DiagramRenderer {
 
   /**
    * Pan to specific coordinates
-   * Requirements: 5.1
+   * Requirements: 5.1, 2.7
    */
   panTo(x: number, y: number): void {
     if (!this.cy) return;
+    
+    // Clear any pending debounce timer
+    if (this.panDebounceTimer) {
+      clearTimeout(this.panDebounceTimer);
+      this.panDebounceTimer = null;
+    }
+    
+    // Apply pan immediately (debouncing removed for correctness)
+    // The pan operation needs to be synchronous for state preservation
     this.cy.pan({ x, y });
   }
 
@@ -199,7 +255,7 @@ export class DiagramRenderer {
 
   /**
    * Select and highlight an element
-   * Requirements: 3.1
+   * Requirements: 3.1, 2.7
    */
   selectElement(elementId: string): void {
     if (!this.cy) return;
@@ -213,12 +269,17 @@ export class DiagramRenderer {
       element.addClass('selected');
       this.selectedElementId = elementId;
       
-      // Center on selected element
-      this.cy.animate({
-        center: { eles: element },
-        zoom: this.cy.zoom()
-      }, {
-        duration: 300
+      // Use requestAnimationFrame for smooth animation (Requirements: 2.7)
+      requestAnimationFrame(() => {
+        if (!this.cy) return;
+        
+        // Center on selected element
+        this.cy.animate({
+          center: { eles: element },
+          zoom: this.cy.zoom()
+        }, {
+          duration: 300
+        });
       });
     }
   }
@@ -342,6 +403,16 @@ export class DiagramRenderer {
    * Destroy the renderer and clean up resources
    */
   destroy(): void {
+    // Clear debounce timers
+    if (this.zoomDebounceTimer) {
+      clearTimeout(this.zoomDebounceTimer);
+      this.zoomDebounceTimer = null;
+    }
+    if (this.panDebounceTimer) {
+      clearTimeout(this.panDebounceTimer);
+      this.panDebounceTimer = null;
+    }
+    
     if (this.cy) {
       this.cy.destroy();
       this.cy = null;

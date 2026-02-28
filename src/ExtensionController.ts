@@ -28,6 +28,7 @@ import { FileHighlighter } from './ui/FileHighlighter';
 import { FileMappingService } from './ui/FileMappingService';
 import { ErrorHandler, AnalysisError, AnalysisErrorType, RenderError, RenderErrorType } from './analysis/ErrorHandler';
 import { FileWatcher, FileWatcherConfig, FileChangeEvent } from './analysis/FileWatcher';
+import { MemoryManager } from './performance/MemoryManager';
 
 // Kiro IDE API types (to be provided by Kiro runtime)
 interface ExtensionContext {
@@ -71,6 +72,7 @@ export class ExtensionController {
   private fileMappingService: FileMappingService;
   private fileWatcher: FileWatcher | null = null;
   private errorHandler: ErrorHandler | null = null;
+  private memoryManager: MemoryManager;
   
   // State management (Requirements: 5.5, 6.6, 11.4, 11.5)
   private state: ExtensionState = {
@@ -93,6 +95,7 @@ export class ExtensionController {
     this.webviewManager = new WebviewManager();
     this.fileHighlighter = new FileHighlighter();
     this.fileMappingService = new FileMappingService();
+    this.memoryManager = new MemoryManager();
   }
 
   /**
@@ -144,7 +147,7 @@ export class ExtensionController {
 
   /**
    * Deactivate extension
-   * Requirements: 8.1
+   * Requirements: 8.1, 9.4
    */
   async deactivate(): Promise<void> {
     // Save state before deactivation
@@ -155,10 +158,17 @@ export class ExtensionController {
       this.fileWatcher.stop();
     }
 
-    // Clean up resources
-    this.webviewManager.disposeWebview();
-    this.fileHighlighter.clearHighlights();
-    this.analysisService.dispose();
+    // Clean up resources with memory release (Requirements: 9.4)
+    await this.memoryManager.releaseMemory(async () => {
+      this.webviewManager.disposeWebview();
+      this.fileHighlighter.clearHighlights();
+      this.analysisService.dispose();
+      
+      // Clear state to release memory
+      this.state.groundingData = null;
+      this.state.architecturalModel = null;
+      this.state.analysisResult = null;
+    });
 
     console.log('ArchView extension deactivated');
   }

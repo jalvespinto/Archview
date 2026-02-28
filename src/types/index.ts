@@ -121,6 +121,7 @@ export interface NodeStyle {
   shape: 'rectangle' | 'ellipse' | 'hexagon';
   size: number;
   borderWidth: number;
+  languageIcon?: string; // Icon identifier for the language (e.g., 'python', 'typescript')
 }
 
 export interface EdgeStyle {

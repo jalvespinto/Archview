@@ -92,16 +92,20 @@ export class AbstractionFilter {
   /**
    * Get overview level diagram (level 1 only)
    * Requirement 6.2: Show only top-level components and major dependencies
+   * Requirement 12.3: Group components by language in Overview level
    */
   getOverviewLevel(
     diagramData: DiagramData,
     architecturalModel: ArchitecturalModel
   ): DiagramData {
-    return this.filterByLevel(
+    const filtered = this.filterByLevel(
       diagramData,
       architecturalModel,
       AbstractionLevel.Overview
     );
+
+    // Group nodes by language for better organization
+    return this.groupNodesByLanguage(filtered);
   }
 
   /**
@@ -132,5 +136,52 @@ export class AbstractionFilter {
       architecturalModel,
       AbstractionLevel.Detailed
     );
+  }
+
+  /**
+   * Group nodes by language for better visual organization
+   * Requirement 12.3: Group components by language in Overview level
+   * 
+   * This method organizes nodes spatially by language, making it easier
+   * to see which components belong to which language in multi-language projects.
+   */
+  private groupNodesByLanguage(diagramData: DiagramData): DiagramData {
+    // Group nodes by language
+    const nodesByLanguage = new Map<string, DiagramNode[]>();
+    
+    for (const node of diagramData.nodes) {
+      const language = node.language;
+      if (!nodesByLanguage.has(language)) {
+        nodesByLanguage.set(language, []);
+      }
+      nodesByLanguage.get(language)!.push(node);
+    }
+
+    // Assign positions to create visual grouping
+    // This is a hint to the layout algorithm - actual positioning happens in renderer
+    const groupedNodes: DiagramNode[] = [];
+    let groupIndex = 0;
+    const groupSpacing = 200;
+
+    for (const [language, nodes] of nodesByLanguage.entries()) {
+      const baseX = groupIndex * groupSpacing;
+      
+      nodes.forEach((node, index) => {
+        groupedNodes.push({
+          ...node,
+          position: {
+            x: baseX,
+            y: index * 100,
+          },
+        });
+      });
+      
+      groupIndex++;
+    }
+
+    return {
+      ...diagramData,
+      nodes: groupedNodes,
+    };
   }
 }

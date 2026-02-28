@@ -1,0 +1,187 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.0)'
+        required: true
+        type: string
+
+jobs:
+  test:
+    name: Pre-release Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run all tests
+        run: npm test
+      
+      - name: Run property tests (100 iterations)
+        run: npm run test:property
+        env:
+          PROPERTY_TEST_ITERATIONS: 100
+      
+      - name: Run performance benchmarks
+        run: npm run test:performance
+  
+  build:
+    name: Build and Package
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Compile TypeScript
+        run: npm run compile
+      
+      - name: Run linter
+        run: npm run lint
+      
+      - name: Package extension
+        run: npm run package
+      
+      - name: Get package name
+        id: package
+        run: |
+          PACKAGE_NAME=$(ls *.vsix)
+          echo "name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+      
+      - name: Upload extension package
+        uses: actions/upload-artifact@v3
+        with:
+          name: extension-package
+          path: '*.vsix'
+          retention-days: 90
+      
+      - name: Create checksum
+        run: |
+          sha256sum *.vsix > checksums.txt
+      
+      - name: Upload checksums
+        uses: actions/upload-artifact@v3
+        with:
+          name: checksums
+          path: checksums.txt
+  
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download extension package
+        uses: actions/download-artifact@v3
+        with:
+          name: extension-package
+      
+      - name: Download checksums
+        uses: actions/download-artifact@v3
+        with:
+          name: checksums
+      
+      - name: Extract version from tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/v}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Extract changelog for version
+        id: changelog
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          # Extract changelog section for this version
+          sed -n "/## \[$VERSION\]/,/## \[/p" CHANGELOG.md | sed '$d' > release-notes.md
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
+          body_path: release-notes.md
+          draft: false
+          prerelease: false
+          files: |
+            *.vsix
+            checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  
+  publish:
+    name: Publish to Marketplace
+    needs: release
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Download extension package
+        uses: actions/download-artifact@v3
+        with:
+          name: extension-package
+      
+      - name: Publish to Kiro Marketplace
+        run: |
+          # Replace with actual Kiro marketplace publish command
+          # npx kiro-vsce publish -p ${{ secrets.KIRO_MARKETPLACE_TOKEN }}
+          echo "Publishing to Kiro marketplace..."
+          echo "Package: $(ls *.vsix)"
+        env:
+          KIRO_MARKETPLACE_TOKEN: ${{ secrets.KIRO_MARKETPLACE_TOKEN }}
+      
+      - name: Notify on success
+        if: success()
+        run: |
+          echo "✅ Successfully published to Kiro marketplace!"
+      
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Failed to publish to marketplace"
+          exit 1

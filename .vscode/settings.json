@@ -8,6 +8,7 @@
         "node *",
         "wc *",
         "tail *",
-        "head *"
+        "head *",
+        "timeout *"
     ]
 }

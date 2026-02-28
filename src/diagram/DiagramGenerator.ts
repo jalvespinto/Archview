@@ -121,6 +121,7 @@ export class DiagramGenerator {
   /**
    * Infer language from file paths
    * Requirement 12.2: Detect programming language
+   * Requirement 12.5: Handle unknown file types as generic components
    */
   private inferLanguage(filePaths: string[]): Language {
     if (filePaths.length === 0) {
@@ -152,6 +153,10 @@ export class DiagramGenerator {
         case 'go':
           language = Language.Go;
           break;
+        default:
+          // Unknown file types are handled as generic components
+          // Requirement 12.5: Include unrecognized languages as generic components
+          language = Language.Unknown;
       }
 
       extensionCounts.set(language, (extensionCounts.get(language) || 0) + 1);

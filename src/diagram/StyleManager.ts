@@ -16,6 +16,7 @@ export class StyleManager {
    * Get node style based on language and component type
    * Requirement 12.2: Language-based color coding
    * Requirement 2.5: Component type-based shapes
+   * Requirement 12.3: Add language icons to nodes
    */
   getNodeStyle(language: Language, componentType: ComponentType): NodeStyle {
     return {
@@ -23,6 +24,7 @@ export class StyleManager {
       shape: this.getComponentShape(componentType),
       size: this.getComponentSize(componentType),
       borderWidth: 2,
+      languageIcon: this.getLanguageIcon(language),
     };
   }
 
@@ -58,6 +60,28 @@ export class StyleManager {
       case Language.Unknown:
       default:
         return '#808080'; // Gray for unknown
+    }
+  }
+
+  /**
+   * Get icon identifier for programming language
+   * Requirement 12.3: Add language icons to diagram nodes
+   */
+  private getLanguageIcon(language: Language): string {
+    switch (language) {
+      case Language.Python:
+        return 'python';
+      case Language.JavaScript:
+        return 'javascript';
+      case Language.TypeScript:
+        return 'typescript';
+      case Language.Java:
+        return 'java';
+      case Language.Go:
+        return 'go';
+      case Language.Unknown:
+      default:
+        return 'file'; // Generic file icon for unknown languages
     }
   }
 

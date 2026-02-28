@@ -1,15 +1,33 @@
 {
   "name": "archview",
   "displayName": "ArchView - AI Architecture Diagrams",
-  "description": "Automatically generate interactive architecture diagrams from your codebase using AI",
+  "description": "Automatically generate interactive architecture diagrams from your codebase using AI. Visualize, explore, and understand your software architecture.",
   "version": "0.1.0",
   "publisher": "kiro",
+  "author": {
+    "name": "Kiro Team"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kiro/archview"
+  },
+  "bugs": {
+    "url": "https://github.com/kiro/archview/issues"
+  },
+  "homepage": "https://github.com/kiro/archview#readme",
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
   "engines": {
     "kiro": "^1.0.0",
     "node": ">=18.0.0"
   },
   "categories": [
     "Visualization",
+    "Programming Languages",
     "Other"
   ],
   "keywords": [
@@ -17,7 +35,23 @@
     "diagram",
     "visualization",
     "ai",
-    "codebase"
+    "codebase",
+    "analysis",
+    "interactive",
+    "graph",
+    "dependency",
+    "structure",
+    "typescript",
+    "javascript",
+    "python",
+    "java",
+    "go",
+    "multi-language"
+  ],
+  "activationEvents": [
+    "onCommand:archview.generateDiagram",
+    "onCommand:archview.refreshDiagram",
+    "onCommand:archview.exportDiagram"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -138,7 +172,12 @@
     "test:property": "jest --testPathPattern=property",
     "test:performance": "jest --testPathPattern=performance",
     "lint": "eslint src --ext ts",
-    "package": "npm run compile && vsce package"
+    "lint:fix": "eslint src --ext ts --fix",
+    "typecheck": "tsc --noEmit",
+    "package": "npm run compile && vsce package",
+    "vscode:prepublish": "npm run compile",
+    "pretest": "npm run compile",
+    "ci": "npm run lint && npm run typecheck && npm run test:coverage"
   },
   "dependencies": {
     "cytoscape": "^3.28.0",
@@ -156,6 +195,7 @@
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
+    "@vscode/vsce": "^2.22.0",
     "canvas": "^3.2.1",
     "eslint": "^8.0.0",
     "fast-check": "^3.15.0",
