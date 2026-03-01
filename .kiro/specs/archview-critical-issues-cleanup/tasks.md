@@ -204,7 +204,7 @@ These critical fixes address security vulnerabilities, performance issues, and f
     - Verify SHA-256 hash has no collisions
     - _Requirements: 2.2, 2.3, 2.4, 2.5, 2.6, 2.7_
 
-  - [ ] 7.9 Verify Phase 2 preservation tests still pass
+  - [x] 7.9 Verify Phase 2 preservation tests still pass
     - **Property 2: Preservation** - Core Functionality Unchanged
     - **IMPORTANT**: Re-run the SAME tests from task 6 - do NOT write new tests
     - Run preservation property tests from step 6
@@ -214,7 +214,7 @@ These critical fixes address security vulnerabilities, performance issues, and f
     - Confirm parser functionality still works
     - Confirm cache functionality still works
 
-- [ ] 8. Phase 2 Checkpoint - Ensure all tests pass
+- [x] 8. Phase 2 Checkpoint - Ensure all tests pass
   - Run full test suite for Phase 2 (`npm test`)
   - Verify no regressions in core functionality
   - Ask user if questions arise before proceeding to Phase 3
@@ -226,7 +226,7 @@ These medium severity fixes address reliability, performance, security issues, a
 
 ### Exploratory Tests (Phase 3)
 
-- [ ] 9. Write bug condition exploration tests for Phase 3 issues
+- [x] 9. Write bug condition exploration tests for Phase 3 issues
   - **Property 1: Fault Condition** - Medium Severity Issues
   - **CRITICAL**: These tests MUST FAIL on unfixed code - failures confirm the bugs exist
   - **DO NOT attempt to fix the tests or the code when they fail**
@@ -243,7 +243,7 @@ These medium severity fixes address reliability, performance, security issues, a
   - Document counterexamples found
   - _Requirements: 2.8, 2.9, 2.10, 2.11, 2.12, 2.13, 2.14_
 
-- [ ] 10. Write preservation property tests for Phase 3 (BEFORE implementing fixes)
+- [x] 10. Write preservation property tests for Phase 3 (BEFORE implementing fixes)
   - **Property 2: Preservation** - Core Functionality Unchanged
   - **IMPORTANT**: Follow observation-first methodology
   - Observe behavior on UNFIXED code for normal operations
