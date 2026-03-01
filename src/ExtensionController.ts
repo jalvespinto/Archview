@@ -11,6 +11,7 @@
  */
 
 import * as path from 'path';
+import * as vscode from 'vscode';
 import {
   AnalysisResult,
   DiagramData,
@@ -179,7 +180,6 @@ export class ExtensionController {
    */
   private registerCommands(): void {
     console.log('=== registerCommands called ===');
-    const vscode = require('vscode');
     
     // Test command to verify registration works
     const testDisposable = vscode.commands.registerCommand(
@@ -436,7 +436,7 @@ export class ExtensionController {
       } else {
         // Use fallback heuristic interpretation
         console.log('Using fallback heuristic model...');
-        this.state.architecturalModel = await this.aiService['buildHeuristicModel'](
+        this.state.architecturalModel = await this.aiService.buildHeuristicModel(
           this.state.groundingData,
           0 // inferenceTimeMs for fallback
         );
@@ -478,7 +478,6 @@ export class ExtensionController {
       } else {
         console.error('Failed to generate diagram:', error);
         // Show error to user
-        const vscode = require('vscode');
         vscode.window.showErrorMessage(`Failed to generate diagram: ${error instanceof Error ? error.message : String(error)}`);
       }
     }

@@ -4,6 +4,7 @@
  * Requirements: 2.1, 6.5
  */
 
+import * as vscode from 'vscode';
 import { DiagramData, WebviewMessage, AbstractionLevel } from '../types';
 
 /**
@@ -120,8 +121,6 @@ export class WebviewManager {
    * Create webview panel using Kiro/VS Code API
    */
   private createWebviewPanel(): any {
-    const vscode = require('vscode');
-    
     // Create webview panel using Kiro/VS Code API
     // ViewColumn.One = 1 (show in first editor column)
     const panel = vscode.window.createWebviewPanel(

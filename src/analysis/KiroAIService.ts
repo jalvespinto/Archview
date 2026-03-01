@@ -595,75 +595,75 @@ Focus on:
    * @param inferenceTimeMs - Time taken (for consistency with LLM path)
    * @returns Heuristic architectural model with low confidence
    */
-  private buildHeuristicModel(
-    grounding: GroundingData,
-    inferenceTimeMs: number
-  ): ArchitecturalModel {
-    const components: ArchitecturalComponent[] = [];
-    const relationships: ArchitecturalRelationship[] = [];
-    
-    // Group files by top-level directory
-    const directoryGroups = this.groupFilesByTopLevelDirectory(grounding);
-    
-    // Create components from directory groups
-    for (const [dirPath, files] of directoryGroups.entries()) {
-      const dirName = dirPath.split('/').pop() || dirPath;
-      const componentId = this.sanitizeId(dirPath);
-      
-      components.push({
-        id: componentId,
-        name: this.formatComponentName(dirName),
-        description: `Component containing files from ${dirPath}`,
-        role: 'module',
-        filePaths: files.map(f => f.path),
-        abstractionLevel: AbstractionLevel.Overview,
-        subComponents: [],
-        parent: null,
-      });
-    }
-    
-    // Derive relationships from import graph
-    const componentMap = this.buildFileToComponentMap(components);
-    const relationshipSet = new Set<string>();
-    
-    for (const importEdge of grounding.importGraph) {
-      const sourceComponent = componentMap.get(importEdge.sourceFile);
-      const targetComponent = componentMap.get(importEdge.targetFile);
-      
-      // Only create relationships between different components
-      if (sourceComponent && targetComponent && sourceComponent !== targetComponent) {
-        const relId = `${sourceComponent}->${targetComponent}`;
-        
-        // Avoid duplicate relationships
-        if (!relationshipSet.has(relId)) {
-          relationshipSet.add(relId);
-          
-          relationships.push({
-            id: this.sanitizeId(relId),
-            sourceId: sourceComponent,
-            targetId: targetComponent,
-            type: RelationshipType.Import,
-            description: `Import dependency from ${sourceComponent} to ${targetComponent}`,
-            strength: 0.5, // Medium strength for heuristic relationships
-          });
+  public buildHeuristicModel(
+      grounding: GroundingData,
+      inferenceTimeMs: number
+    ): ArchitecturalModel {
+      const components: ArchitecturalComponent[] = [];
+      const relationships: ArchitecturalRelationship[] = [];
+
+      // Group files by top-level directory
+      const directoryGroups = this.groupFilesByTopLevelDirectory(grounding);
+
+      // Create components from directory groups
+      for (const [dirPath, files] of directoryGroups.entries()) {
+        const dirName = dirPath.split('/').pop() || dirPath;
+        const componentId = this.sanitizeId(dirPath);
+
+        components.push({
+          id: componentId,
+          name: this.formatComponentName(dirName),
+          description: `Component containing files from ${dirPath}`,
+          role: 'module',
+          filePaths: files.map(f => f.path),
+          abstractionLevel: AbstractionLevel.Overview,
+          subComponents: [],
+          parent: null,
+        });
+      }
+
+      // Derive relationships from import graph
+      const componentMap = this.buildFileToComponentMap(components);
+      const relationshipSet = new Set<string>();
+
+      for (const importEdge of grounding.importGraph) {
+        const sourceComponent = componentMap.get(importEdge.sourceFile);
+        const targetComponent = componentMap.get(importEdge.targetFile);
+
+        // Only create relationships between different components
+        if (sourceComponent && targetComponent && sourceComponent !== targetComponent) {
+          const relId = `${sourceComponent}->${targetComponent}`;
+
+          // Avoid duplicate relationships
+          if (!relationshipSet.has(relId)) {
+            relationshipSet.add(relId);
+
+            relationships.push({
+              id: this.sanitizeId(relId),
+              sourceId: sourceComponent,
+              targetId: targetComponent,
+              type: RelationshipType.Import,
+              description: `Import dependency from ${sourceComponent} to ${targetComponent}`,
+              strength: 0.5, // Medium strength for heuristic relationships
+            });
+          }
         }
       }
+
+      const metadata: ArchitecturalModelMetadata = {
+        llmInferenceTimeMs: inferenceTimeMs,
+        tierUsed: 1,
+        confidence: 'low', // Always low confidence for heuristic models
+        filesAnalyzed: grounding.files.length,
+      };
+
+      return {
+        components,
+        relationships,
+        patterns: [], // No pattern detection in heuristic mode
+        metadata,
+      };
     }
-    
-    const metadata: ArchitecturalModelMetadata = {
-      llmInferenceTimeMs: inferenceTimeMs,
-      tierUsed: 1,
-      confidence: 'low', // Always low confidence for heuristic models
-      filesAnalyzed: grounding.files.length,
-    };
-    
-    return {
-      components,
-      relationships,
-      patterns: [], // No pattern detection in heuristic mode
-      metadata,
-    };
-  }
 
   /**
    * Group files by their top-level directory

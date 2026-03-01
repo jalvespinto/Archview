@@ -142,7 +142,7 @@ These critical fixes address security vulnerabilities, performance issues, and f
     - This is REQUIRED before Issue 7.3 to avoid compilation errors
     - Verify package.json devDependencies includes @types/vscode
 
-  - [ ] 7.3 Issue 1.3 - Replace runtime require with static imports
+  - [x] 7.3 Issue 1.3 - Replace runtime require with static imports
     - In ExtensionController.ts: Add `import * as vscode from 'vscode'` at top of file
     - Remove line 182 in registerCommands(): `const vscode = require('vscode')`
     - Remove line 481 in generateDiagram() catch block: `const vscode = require('vscode')`
@@ -154,7 +154,7 @@ These critical fixes address security vulnerabilities, performance issues, and f
     - _Preservation: All vscode API usage continues to work identically_
     - _Requirements: 2.3_
 
-  - [ ] 7.4 Issue 1.4 - Fix private method access
+  - [x] 7.4 Issue 1.4 - Fix private method access
     - In KiroAIService.ts: Change buildHeuristicModel from private to public (Option A - simpler)
     - In ExtensionController.ts line 439: Change from `this.aiService['buildHeuristicModel'](...)` to `this.aiService.buildHeuristicModel(...)`
     - Alternative Option B: Extract to HeuristicModelBuilder service with dependency injection (if method should stay private)
