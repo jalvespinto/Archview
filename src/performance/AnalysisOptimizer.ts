@@ -3,7 +3,7 @@
  * Requirements: 1.5, 9.3
  * 
  * Responsibilities:
- * - Use worker threads for parallel file parsing if supported
+ * - Use async batching for parallel file parsing
  * - Implement incremental parsing for file updates
  * - Batch file system operations
  * - Optimize AST traversal algorithms
@@ -11,7 +11,6 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { Worker } from 'worker_threads';
 
 /**
  * File batch for processing
@@ -46,40 +45,15 @@ interface IncrementalCacheEntry {
  * Analysis optimizer for performance improvements
  */
 export class AnalysisOptimizer {
-  private workerThreadsSupported: boolean = false;
   private incrementalCache: Map<string, IncrementalCacheEntry> = new Map();
   private readonly DEFAULT_BATCH_SIZE = 10;
-  private readonly MAX_WORKERS = 4;
 
   constructor() {
-    this.checkWorkerThreadSupport();
+    // Worker thread support removed - using async batching only
   }
 
   /**
-   * Check if worker threads are supported in current environment
-   * Requirements: 9.3
-   */
-  private checkWorkerThreadSupport(): void {
-    try {
-      // Try to access Worker - if it throws, worker threads not supported
-      const testWorker = Worker;
-      this.workerThreadsSupported = true;
-      console.log('Worker threads are supported');
-    } catch (error) {
-      this.workerThreadsSupported = false;
-      console.log('Worker threads not supported - using async batching fallback');
-    }
-  }
-
-  /**
-   * Check if worker threads are available
-   */
-  isWorkerThreadsSupported(): boolean {
-    return this.workerThreadsSupported;
-  }
-
-  /**
-   * Parse files in parallel using worker threads or async batching
+   * Parse files in parallel using async batching
    * Requirements: 9.3
    * 
    * @param files Array of file paths to parse
@@ -90,27 +64,7 @@ export class AnalysisOptimizer {
     files: string[],
     parseFunction: (filePath: string) => Promise<T>
   ): Promise<T[]> {
-    if (this.workerThreadsSupported && files.length > 20) {
-      // Use worker threads for large batches
-      return this.parseWithWorkerThreads(files, parseFunction);
-    } else {
-      // Use async batching for smaller batches or when workers not supported
-      return this.parseWithAsyncBatching(files, parseFunction);
-    }
-  }
-
-  /**
-   * Parse files using worker threads
-   * Requirements: 9.3
-   */
-  private async parseWithWorkerThreads<T>(
-    files: string[],
-    parseFunction: (filePath: string) => Promise<T>
-  ): Promise<T[]> {
-    // Note: In production, this would use actual worker threads
-    // For now, fall back to async batching since worker thread implementation
-    // requires separate worker script files
-    console.log('Worker threads requested but using async batching (worker script not implemented)');
+    // Use async batching for all file parsing
     return this.parseWithAsyncBatching(files, parseFunction);
   }
 
