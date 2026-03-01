@@ -94,7 +94,7 @@ These critical fixes address security vulnerabilities, performance issues, and f
 
 ### Exploratory Tests (Phase 2)
 
-- [ ] 5. Write bug condition exploration tests for Phase 2 issues
+- [x] 5. Write bug condition exploration tests for Phase 2 issues
   - **Property 1: Fault Condition** - Critical Security and Performance Issues
   - **CRITICAL**: These tests MUST FAIL on unfixed code - failures confirm the bugs exist
   - **DO NOT attempt to fix the tests or the code when they fail**
@@ -110,7 +110,7 @@ These critical fixes address security vulnerabilities, performance issues, and f
   - Document counterexamples found
   - _Requirements: 2.2, 2.3, 2.4, 2.5, 2.6, 2.7_
 
-- [ ] 6. Write preservation property tests for Phase 2 (BEFORE implementing fixes)
+- [x] 6. Write preservation property tests for Phase 2 (BEFORE implementing fixes)
   - **Property 2: Preservation** - Core Functionality Unchanged
   - **IMPORTANT**: Follow observation-first methodology
   - Observe behavior on UNFIXED code for normal operations
