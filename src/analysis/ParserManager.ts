@@ -363,8 +363,9 @@ export class ParserManager {
   /**
    * Get default language grammar for fallback cases
    * Uses TypeScript as the default since it's widely used
+   * @returns Language grammar object (typed as any because tree-sitter doesn't export Language type)
    */
-  private getDefaultLanguage(): Parser.Language {
+  private getDefaultLanguage(): any {
     return TypeScript.typescript;
   }
 

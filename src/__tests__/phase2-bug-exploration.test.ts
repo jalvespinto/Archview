@@ -1,11 +1,8 @@
 /**
  * Phase 2 Bug Condition Exploration Tests
  * 
- * These tests confirm bugs exist by asserting the buggy conditions are present.
- * Tests are designed to PASS on unfixed code (confirming bugs exist).
- * After fixes are applied, these tests will FAIL (confirming bugs are fixed).
- * 
- * This is the correct approach: tests demonstrate bugs exist before fixing them.
+ * These tests verify that Phase 2 bugs have been fixed by asserting the expected (correct) behavior.
+ * Tests are designed to PASS on fixed code (confirming bugs are resolved).
  * 
  * Requirements: 2.2, 2.3, 2.4, 2.5, 2.6, 2.7
  */
@@ -18,21 +15,22 @@ describe('Phase 2: Bug Condition Exploration Tests', () => {
   
   describe('Issue 1.2: Eager Extension Activation', () => {
     
-    it('should verify activationEvents is set to "*" (eager activation bug)', () => {
-      // BUG: Extension activates on ALL VS Code events instead of only archview commands
-      // This impacts startup time for all users even if they never use ArchView
+    it('should verify activationEvents is command-specific (not eager "*")', () => {
+      // FIXED: Extension now only activates on archview commands
+      // This improves startup time for all users
       
       const packageJsonPath = path.join(__dirname, '..', '..', 'package.json');
       const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
       
-      // EXPECTED TO PASS: activationEvents should be ["*"] on unfixed code
-      // This confirms the bug exists
-      expect(packageJson.activationEvents).toEqual(['*']);
+      // EXPECTED TO PASS: activationEvents should be command-specific on fixed code
+      expect(packageJson.activationEvents).not.toEqual(['*']);
+      expect(packageJson.activationEvents).toContain('onCommand:archview.generateDiagram');
+      expect(packageJson.activationEvents).toContain('onCommand:archview.refreshDiagram');
+      expect(packageJson.activationEvents).toContain('onCommand:archview.exportDiagram');
     });
     
-    it('should document that extension loads immediately on VS Code startup', () => {
-      // This test documents the expected behavior after fix
-      // After fix, activationEvents should be command-specific
+    it('should document that extension loads only when commands are invoked', () => {
+      // This test verifies the fix is complete
       
       const packageJsonPath = path.join(__dirname, '..', '..', 'package.json');
       const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
@@ -40,14 +38,19 @@ describe('Phase 2: Bug Condition Exploration Tests', () => {
       // Check if commands are defined
       expect(packageJson.contributes.commands).toBeDefined();
       expect(packageJson.contributes.commands.length).toBeGreaterThan(0);
+      
+      // Verify all activation events are command-specific
+      const allCommandSpecific = packageJson.activationEvents.every((event: string) => 
+        event.startsWith('onCommand:')
+      );
+      expect(allCommandSpecific).toBe(true);
     });
   });
 
   describe('Issue 1.3: Runtime require() Calls Bypass TypeScript Type Checking', () => {
     
-    it('should find runtime require() in ExtensionController.registerCommands method', () => {
-      // BUG: Runtime require() bypasses TypeScript type checking
-      // Everything becomes 'any' type
+    it('should verify NO runtime require() in ExtensionController.registerCommands method', () => {
+      // FIXED: Top-level imports enable TypeScript type checking
       
       const filePath = path.join(__dirname, '..', 'ExtensionController.ts');
       const content = fs.readFileSync(filePath, 'utf-8');
@@ -60,13 +63,13 @@ describe('Phase 2: Bug Condition Exploration Tests', () => {
       if (registerCommandsMatch) {
         const methodBody = registerCommandsMatch[0];
         
-        // EXPECTED TO PASS: Should find require('vscode') on unfixed code
-        expect(methodBody).toContain("require('vscode')");
+        // EXPECTED TO PASS: Should NOT find require('vscode') on fixed code
+        expect(methodBody).not.toContain("require('vscode')");
       }
     });
     
-    it('should find runtime require() in ExtensionController.handleError method', () => {
-      // BUG: Runtime require() in catch block
+    it('should verify NO runtime require() in ExtensionController.handleError method', () => {
+      // FIXED: No runtime require() in catch block
       
       const filePath = path.join(__dirname, '..', 'ExtensionController.ts');
       const content = fs.readFileSync(filePath, 'utf-8');
@@ -79,13 +82,13 @@ describe('Phase 2: Bug Condition Exploration Tests', () => {
       if (handleErrorMatch) {
         const methodBody = handleErrorMatch[0];
         
-        // EXPECTED TO PASS: Should find require('vscode') on unfixed code
-        expect(methodBody).toContain("require('vscode')");
+        // EXPECTED TO PASS: Should NOT find require('vscode') on fixed code
+        expect(methodBody).not.toContain("require('vscode')");
       }
     });
     
-    it('should find runtime require() in WebviewManager.createWebviewPanel method', () => {
-      // BUG: Runtime require() in createWebviewPanel method
+    it('should verify NO runtime require() in WebviewManager.createWebviewPanel method', () => {
+      // FIXED: No runtime require() in createWebviewPanel method
       
       const filePath = path.join(__dirname, '..', 'ui', 'WebviewManager.ts');
       const content = fs.readFileSync(filePath, 'utf-8');
@@ -98,13 +101,13 @@ describe('Phase 2: Bug Condition Exploration Tests', () => {
       if (createWebviewMatch) {
         const methodBody = createWebviewMatch[0];
         
-        // EXPECTED TO PASS: Should find require('vscode') on unfixed code
-        expect(methodBody).toContain("require('vscode')");
+        // EXPECTED TO PASS: Should NOT find require('vscode') on fixed code
+        expect(methodBody).not.toContain("require('vscode')");
       }
     });
     
-    it('should verify no top-level vscode import exists (bug confirmation)', () => {
-      // Verify that vscode is NOT imported at top level (confirming the bug)
+    it('should verify top-level vscode import exists (fix confirmation)', () => {
+      // Verify that vscode IS imported at top level (confirming the fix)
       
       const filePath = path.join(__dirname, '..', 'ExtensionController.ts');
       const content = fs.readFileSync(filePath, 'utf-8');
@@ -116,16 +119,15 @@ describe('Phase 2: Bug Condition Exploration Tests', () => {
         line.includes('import * as vscode from "vscode"')
       );
       
-      // EXPECTED TO PASS: Should NOT have top-level import on unfixed code
-      expect(hasTopLevelImport).toBe(false);
+      // EXPECTED TO PASS: Should have top-level import on fixed code
+      expect(hasTopLevelImport).toBe(true);
     });
   });
 
   describe('Issue 1.4: Bracket Notation Bypasses Private Method Access Control', () => {
     
-    it('should find bracket notation access in ExtensionController', () => {
-      // BUG: Using bracket notation to access private method
-      // this.aiService['buildHeuristicModel'] bypasses TypeScript access control
+    it('should verify NO bracket notation access in ExtensionController', () => {
+      // FIXED: Using proper method access instead of bracket notation
       
       const filePath = path.join(__dirname, '..', 'ExtensionController.ts');
       const content = fs.readFileSync(filePath, 'utf-8');
@@ -133,28 +135,28 @@ describe('Phase 2: Bug Condition Exploration Tests', () => {
       // Search for bracket notation access to buildHeuristicModel
       const hasBracketNotation = /this\.aiService\['buildHeuristicModel'\]/.test(content);
       
-      // EXPECTED TO PASS: Should find bracket notation on unfixed code
-      expect(hasBracketNotation).toBe(true);
+      // EXPECTED TO PASS: Should NOT find bracket notation on fixed code
+      expect(hasBracketNotation).toBe(false);
     });
     
-    it('should verify buildHeuristicModel is a private method', () => {
-      // Verify that the method being accessed is indeed private
+    it('should verify buildHeuristicModel is now public or properly accessed', () => {
+      // Verify that the method is now public (proper access control)
       
       const filePath = path.join(__dirname, '..', 'analysis', 'KiroAIService.ts');
       const content = fs.readFileSync(filePath, 'utf-8');
       
-      // Search for private buildHeuristicModel method declaration
-      const hasPrivateMethod = /private\s+.*buildHeuristicModel/.test(content);
+      // Search for public buildHeuristicModel method declaration
+      const hasPublicMethod = /public\s+.*buildHeuristicModel/.test(content);
       
-      expect(hasPrivateMethod).toBe(true);
+      // EXPECTED TO PASS: Method should be public on fixed code
+      expect(hasPublicMethod).toBe(true);
     });
   });
 
   describe('Issue 1.5: Parser Created Without Language Grammar', () => {
     
-    it('should verify createEmptyTree() creates parser without setLanguage()', () => {
-      // BUG: Parser created without calling parser.setLanguage()
-      // Tree-sitter requires a language grammar to parse code
+    it('should verify createEmptyTree() creates parser WITH setLanguage()', () => {
+      // FIXED: Parser now has language set before parsing
       
       const filePath = path.join(__dirname, '..', 'analysis', 'ParserManager.ts');
       const content = fs.readFileSync(filePath, 'utf-8');
@@ -167,9 +169,9 @@ describe('Phase 2: Bug Condition Exploration Tests', () => {
       if (createEmptyTreeMatch) {
         const methodBody = createEmptyTreeMatch[0];
         
-        // EXPECTED TO PASS: Should NOT find setLanguage call on unfixed code
+        // EXPECTED TO PASS: Should find setLanguage call on fixed code
         const hasSetLanguage = methodBody.includes('setLanguage');
-        expect(hasSetLanguage).toBe(false);
+        expect(hasSetLanguage).toBe(true);
       }
     });
     
@@ -186,93 +188,58 @@ describe('Phase 2: Bug Condition Exploration Tests', () => {
       expect(usages).toBeGreaterThanOrEqual(3);
     });
     
-    it('should demonstrate parser behavior without language', () => {
-      // Demonstrate that parser without language cannot parse properly
+    it('should verify getDefaultLanguage() method exists', () => {
+      // Verify that getDefaultLanguage helper method was added
       
-      const parser = new Parser();
-      // Do NOT call parser.setLanguage()
+      const filePath = path.join(__dirname, '..', 'analysis', 'ParserManager.ts');
+      const content = fs.readFileSync(filePath, 'utf-8');
       
-      const tree = parser.parse('const x = 1;');
-      
-      // Parser without language returns null or tree with no meaningful children
-      expect(tree === null || tree.rootNode.childCount === 0).toBe(true);
+      // Should have getDefaultLanguage method
+      const hasGetDefaultLanguage = /private getDefaultLanguage\(\)/.test(content);
+      expect(hasGetDefaultLanguage).toBe(true);
     });
   });
 
   describe('Issue 1.6: Worker Thread Code is Dead Code', () => {
     
-    it('should verify parseWithWorkerThreads always falls back (static analysis)', () => {
-      // BUG: parseWithWorkerThreads always falls back to parseWithAsyncBatching
-      // The entire worker thread code path is dead code
+    it('should verify parseWithWorkerThreads method is removed', () => {
+      // FIXED: Dead code removed entirely
       
       const filePath = path.join(__dirname, '..', 'performance', 'AnalysisOptimizer.ts');
       const content = fs.readFileSync(filePath, 'utf-8');
       
-      // Find parseWithWorkerThreads method
-      const methodMatch = content.match(/private async parseWithWorkerThreads<T>\([\s\S]*?\n  \}/);
-      
-      expect(methodMatch).toBeDefined();
-      
-      if (methodMatch) {
-        const methodBody = methodMatch[0];
-        
-        // EXPECTED TO PASS: Should find fallback to parseWithAsyncBatching
-        expect(methodBody).toContain('parseWithAsyncBatching');
-        expect(methodBody).toContain('fall back');
-      }
+      // EXPECTED TO PASS: Should NOT find parseWithWorkerThreads method
+      const hasWorkerMethod = /private async parseWithWorkerThreads/.test(content);
+      expect(hasWorkerMethod).toBe(false);
     });
     
-    it('should demonstrate parseWithWorkerThreads never uses workers (dynamic execution)', async () => {
-      // BUG: Dynamic execution test - call the method and verify it falls back
-      
-      const { AnalysisOptimizer } = await import('../performance/AnalysisOptimizer');
-      const optimizer = new AnalysisOptimizer();
-      
-      // Track if parseWithAsyncBatching is called
-      let asyncBatchingCalled = false;
-      const originalMethod = (optimizer as any).parseWithAsyncBatching;
-      (optimizer as any).parseWithAsyncBatching = async function(...args: any[]) {
-        asyncBatchingCalled = true;
-        return originalMethod.apply(this, args);
-      };
-      
-      // Call parseWithWorkerThreads
-      const testItems = ['item1', 'item2'];
-      const parseFunc = async (item: string) => ({ result: item });
-      
-      await (optimizer as any).parseWithWorkerThreads(testItems, parseFunc);
-      
-      // EXPECTED TO PASS: Should always call parseWithAsyncBatching (fallback)
-      expect(asyncBatchingCalled).toBe(true);
-    });
-    
-    it('should verify worker support check only checks if Worker class exists', () => {
-      // BUG: Worker support check only verifies Worker class exists
-      // But actual implementation is a no-op
+    it('should verify worker support check is removed', () => {
+      // FIXED: Worker support check removed
       
       const filePath = path.join(__dirname, '..', 'performance', 'AnalysisOptimizer.ts');
       const content = fs.readFileSync(filePath, 'utf-8');
       
-      // Find checkWorkerThreadSupport method
-      const methodMatch = content.match(/private checkWorkerThreadSupport\(\): void \{[\s\S]*?\n  \}/);
+      // EXPECTED TO PASS: Should NOT find checkWorkerThreadSupport method
+      const hasWorkerCheck = /private checkWorkerThreadSupport/.test(content);
+      expect(hasWorkerCheck).toBe(false);
+    });
+    
+    it('should verify parseWithAsyncBatching still exists', () => {
+      // Verify that the working async batching method is still present
       
-      expect(methodMatch).toBeDefined();
+      const filePath = path.join(__dirname, '..', 'performance', 'AnalysisOptimizer.ts');
+      const content = fs.readFileSync(filePath, 'utf-8');
       
-      if (methodMatch) {
-        const methodBody = methodMatch[0];
-        
-        // Check only tests if Worker exists, doesn't actually use it
-        expect(methodBody).toContain('const testWorker = Worker');
-        expect(methodBody).toContain('this.workerThreadsSupported = true');
-      }
+      // Should still have parseWithAsyncBatching
+      const hasAsyncBatching = /private async parseWithAsyncBatching/.test(content);
+      expect(hasAsyncBatching).toBe(true);
     });
   });
 
   describe('Issue 1.7: 32-bit Hash Function Has Collision Risk', () => {
     
-    it('should verify custom hash function uses 32-bit hash', () => {
-      // BUG: Custom hash function uses 32-bit hash with high collision risk
-      // Comment says "in production, use crypto.createHash"
+    it('should verify SHA-256 hash is used instead of custom 32-bit hash', () => {
+      // FIXED: Using crypto.createHash with SHA-256
       
       const filePath = path.join(__dirname, '..', 'performance', 'AnalysisOptimizer.ts');
       const content = fs.readFileSync(filePath, 'utf-8');
@@ -285,74 +252,47 @@ describe('Phase 2: Bug Condition Exploration Tests', () => {
       if (methodMatch) {
         const methodBody = methodMatch[0];
         
-        // EXPECTED TO PASS: Should find custom 32-bit hash on unfixed code
-        expect(methodBody).toContain('let hash = 0');
-        expect(methodBody).toContain('hash << 5');
-        expect(methodBody).toContain('hash & hash'); // Convert to 32-bit
-        expect(methodBody).toContain('hash.toString(36)');
-        
-        // Should have comment about using crypto in production
+        // EXPECTED TO PASS: Should use crypto.createHash on fixed code
         expect(methodBody).toContain('crypto.createHash');
+        expect(methodBody).toContain('sha256');
+        
+        // Should NOT have custom 32-bit hash
+        expect(methodBody).not.toContain('let hash = 0');
+        expect(methodBody).not.toContain('hash << 5');
       }
     });
     
-    it('should verify AnalysisService uses crypto.createHash correctly', () => {
-      // Verify that AnalysisService.ts:495 uses crypto.createHash correctly
-      // This shows the inconsistency
+    it('should verify crypto import exists', () => {
+      // Verify that crypto module is imported
+      
+      const filePath = path.join(__dirname, '..', 'performance', 'AnalysisOptimizer.ts');
+      const content = fs.readFileSync(filePath, 'utf-8');
+      
+      // Check for crypto import in first 50 lines
+      const lines = content.split('\n').slice(0, 50);
+      const hasCryptoImport = lines.some(line => 
+        line.includes("import * as crypto from 'crypto'") ||
+        line.includes('import * as crypto from "crypto"')
+      );
+      
+      expect(hasCryptoImport).toBe(true);
+    });
+    
+    it('should verify AnalysisService also uses crypto.createHash', () => {
+      // Verify consistency between AnalysisService and AnalysisOptimizer
       
       const filePath = path.join(__dirname, '..', 'analysis', 'AnalysisService.ts');
       
       if (fs.existsSync(filePath)) {
         const content = fs.readFileSync(filePath, 'utf-8');
         
-        // Check if crypto.createHash is used
+        // Both should use crypto.createHash
         const usesCrypto = content.includes('crypto.createHash');
         
         if (usesCrypto) {
-          // Inconsistency exists between AnalysisService and AnalysisOptimizer
           expect(usesCrypto).toBe(true);
         }
       }
-    });
-    
-    it('should demonstrate hash collision risk with birthday paradox', () => {
-      // Demonstrate that 32-bit hash has collision risk using birthday paradox
-      
-      // Simple 32-bit hash function (same as in code)
-      function hash32bit(content: string): string {
-        let hash = 0;
-        for (let i = 0; i < content.length; i++) {
-          const char = content.charCodeAt(i);
-          hash = ((hash << 5) - hash) + char;
-          hash = hash & hash; // Convert to 32-bit integer
-        }
-        return hash.toString(36);
-      }
-      
-      // Generate many hashes to demonstrate collision risk
-      const hashes = new Set<string>();
-      const sampleCount = 100000;
-      
-      for (let i = 0; i < sampleCount; i++) {
-        const content = `content_${i}_${'x'.repeat(i % 100)}`;
-        const hash = hash32bit(content);
-        hashes.add(hash);
-      }
-      
-      // With 32-bit hash space (~4 billion values), birthday paradox predicts
-      // 50% collision probability at sqrt(4B) ≈ 65k samples
-      const uniqueHashes = hashes.size;
-      const collisionCount = sampleCount - uniqueHashes;
-      
-      // Verify hash output is short base-36 string (proving 32-bit space)
-      const sampleHash = hash32bit('test');
-      expect(sampleHash.length).toBeLessThan(10); // 32-bit base-36 is max 7 chars
-      
-      // With 100k samples, collisions are highly likely (or at minimum, space is small)
-      expect(uniqueHashes).toBeLessThanOrEqual(sampleCount);
-      
-      // Document the risk: SHA-256 would produce 64-char hex strings with no practical collision risk
-      expect(sampleHash.length).toBeLessThan(64); // Much smaller than SHA-256
     });
   });
 });
