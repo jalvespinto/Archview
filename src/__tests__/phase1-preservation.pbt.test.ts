@@ -218,13 +218,13 @@ describe('Phase 1: Preservation Property Tests', () => {
   describe('Property 2.3: Error Handling for Non-Type-Collision Errors (Req 3.7)', () => {
     
     it('should handle parse errors gracefully with user-friendly messages', async () => {
-      const errorHandler = new ErrorHandler(
-        { appendLine: jest.fn(), show: jest.fn() },
-        { 
-          showErrorMessage: jest.fn().mockResolvedValue(undefined),
-          showWarningMessage: jest.fn().mockResolvedValue(undefined)
-        }
-      );
+      const mockOutputChannel = { appendLine: jest.fn(), show: jest.fn() };
+      const mockWindow = { 
+        showErrorMessage: jest.fn().mockResolvedValue(undefined),
+        showWarningMessage: jest.fn().mockResolvedValue(undefined)
+      };
+      
+      const errorHandler = new ErrorHandler(mockOutputChannel, mockWindow);
       
       // Create a parse error (non-type-collision error)
       const parseError = new AnalysisError(
@@ -238,18 +238,27 @@ describe('Phase 1: Preservation Property Tests', () => {
       // Handle the error
       errorHandler.handleAnalysisError(parseError);
       
-      // Verify error was handled (no throw)
-      expect(true).toBe(true);
+      // Verify error was logged
+      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to parse file')
+      );
+      
+      // Verify user-friendly message was shown (matches actual format)
+      expect(mockWindow.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('The file contains syntax errors'),
+        expect.anything(),
+        expect.anything()
+      );
     });
 
     it('should handle configuration errors gracefully', async () => {
-      const errorHandler = new ErrorHandler(
-        { appendLine: jest.fn(), show: jest.fn() },
-        { 
-          showErrorMessage: jest.fn().mockResolvedValue(undefined),
-          showWarningMessage: jest.fn().mockResolvedValue(undefined)
-        }
-      );
+      const mockOutputChannel = { appendLine: jest.fn(), show: jest.fn() };
+      const mockWindow = { 
+        showErrorMessage: jest.fn().mockResolvedValue(undefined),
+        showWarningMessage: jest.fn().mockResolvedValue(undefined)
+      };
+      
+      const errorHandler = new ErrorHandler(mockOutputChannel, mockWindow);
       
       // Create an unsupported format error (valid error type)
       const formatError = new AnalysisError(
@@ -263,18 +272,27 @@ describe('Phase 1: Preservation Property Tests', () => {
       // Handle the error
       errorHandler.handleAnalysisError(formatError);
       
-      // Verify error was handled
-      expect(true).toBe(true);
+      // Verify error was logged
+      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
+        expect.stringContaining('Unsupported file format')
+      );
+      
+      // Verify user-friendly message was shown (matches actual format)
+      expect(mockWindow.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('This file type is not supported'),
+        expect.anything(),
+        expect.anything()
+      );
     });
 
     it('should handle timeout errors gracefully', async () => {
-      const errorHandler = new ErrorHandler(
-        { appendLine: jest.fn(), show: jest.fn() },
-        { 
-          showErrorMessage: jest.fn().mockResolvedValue(undefined),
-          showWarningMessage: jest.fn().mockResolvedValue(undefined)
-        }
-      );
+      const mockOutputChannel = { appendLine: jest.fn(), show: jest.fn() };
+      const mockWindow = { 
+        showErrorMessage: jest.fn().mockResolvedValue(undefined),
+        showWarningMessage: jest.fn().mockResolvedValue(undefined)
+      };
+      
+      const errorHandler = new ErrorHandler(mockOutputChannel, mockWindow);
       
       // Create a timeout error
       const timeoutError = new AnalysisError(
@@ -288,8 +306,18 @@ describe('Phase 1: Preservation Property Tests', () => {
       // Handle the error
       errorHandler.handleAnalysisError(timeoutError);
       
-      // Verify error was handled
-      expect(true).toBe(true);
+      // Verify error was logged
+      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
+        expect.stringContaining('timed out')
+      );
+      
+      // Verify user-friendly message was shown (matches actual format)
+      expect(mockWindow.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('The analysis took too long'),
+        expect.anything(),
+        expect.anything(),
+        expect.anything()
+      );
     });
 
     it('should provide retry functionality for transient errors', async () => {

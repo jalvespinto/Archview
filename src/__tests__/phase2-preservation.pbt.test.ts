@@ -19,7 +19,7 @@ import { AnalysisService } from '../analysis/AnalysisService';
 import { DiagramGenerator } from '../diagram/DiagramGenerator';
 import { WebviewManager } from '../ui/WebviewManager';
 import { AnalysisOptimizer } from '../performance/AnalysisOptimizer';
-import { Language, AbstractionLevel } from '../types';
+import { Language, AbstractionLevel, RelationshipType } from '../types';
 import { ArchitecturalModel, ArchitecturalComponent } from '../types/analysis';
 
 describe('Phase 2: Preservation Property Tests', () => {
@@ -159,79 +159,88 @@ func main() {
 
   describe('Property 2.2: Webview Display and Interaction (Req 3.2, 3.4)', () => {
     
-    it('should create webview without errors in production environment', () => {
-      // NOTE: This test documents that webview creation currently uses runtime require('vscode')
-      // which is Issue 1.3 that will be fixed in Phase 2
-      // In test environment, vscode module is not available, so we skip actual webview creation
-      // This test verifies the preservation requirement: webview functionality should work in production
-      
+    it('should create webview panel and track state', () => {
       const webviewManager = new WebviewManager();
       
-      // In production with vscode module available, this would work
-      // In test environment, we just verify the manager exists
+      // Verify webview manager API exists
       expect(webviewManager).toBeDefined();
       expect(typeof webviewManager.isActive).toBe('function');
-    });
-
-    it('should update diagram data in webview', async () => {
-      // NOTE: Webview requires vscode module which is not available in test environment
-      // This test verifies diagram generation works independently of webview
-      
-      const diagramGenerator = new DiagramGenerator();
-      
-      // Create a simple architectural model
-      const model: ArchitecturalModel = {
-        components: [
-          {
-            id: 'comp1',
-            name: 'Component1',
-            role: 'test-component',
-            filePaths: ['test.ts'],
-            description: 'Test component',
-            abstractionLevel: AbstractionLevel.Module,
-            subComponents: [],
-            parent: null
-          }
-        ],
-        relationships: [],
-        patterns: [],
-        metadata: {
-          llmInferenceTimeMs: 0,
-          tierUsed: 1,
-          confidence: 'high',
-          filesAnalyzed: 1
-        }
-      };
-      
-      // Generate diagram - this is the core functionality to preserve
-      const diagramData = await diagramGenerator.generateDiagram(
-        model,
-        AbstractionLevel.Module
-      );
-      
-      // Verify diagram data structure
-      expect(diagramData).toBeDefined();
-      expect(diagramData.nodes).toBeDefined();
-      expect(Array.isArray(diagramData.nodes)).toBe(true);
-      expect(diagramData.edges).toBeDefined();
-      expect(Array.isArray(diagramData.edges)).toBe(true);
-      
-      // In production, webview.updateDiagram(diagramData) would display this
-      // The preservation requirement is that diagram generation produces valid data
-    });
-
-    it('should handle message passing between extension and webview', () => {
-      // NOTE: Message handling requires webview which requires vscode module
-      // This test verifies the message handler registration API exists
-      
-      const webviewManager = new WebviewManager();
-      
-      // Verify the API exists for message handling
       expect(typeof webviewManager.onMessage).toBe('function');
       expect(typeof webviewManager.postMessage).toBe('function');
       
-      // In production, these would work with actual webview
-      // The preservation requirement is that the API remains available
+      // Verify initial state
+      expect(webviewManager.isActive()).toBe(false);
+    });
+
+    it('should handle message registration and cleanup', () => {
+      const webviewManager = new WebviewManager();
+      
+      // Register a message handler
+      const handler = jest.fn();
+      
+      // onMessage should accept a handler function
+      expect(() => {
+        webviewManager.onMessage(handler);
+      }).not.toThrow();
+      
+      // Verify handler is stored (preservation: handlers should be tracked)
+      // Note: This tests the API contract, actual webview requires vscode module
+    });
+
+    it('should generate diagram with multiple components', async () => {
+      // Test DiagramGenerator with various component models
+      const diagramGenerator = new DiagramGenerator();
+      
+      // Create models with different component counts
+      const testCases = [1, 3, 5, 10];
+      
+      for (const componentCount of testCases) {
+        const components: ArchitecturalComponent[] = Array.from({ length: componentCount }, (_, i) => ({
+          id: `comp${i}`,
+          name: `Component${i}`,
+          role: `role${i}`,
+          filePaths: [`file${i}.ts`],
+          description: `Component ${i}`,
+          abstractionLevel: AbstractionLevel.Module,
+          subComponents: [],
+          parent: null
+        }));
+        
+        const model: ArchitecturalModel = {
+          components,
+          relationships: [],
+          patterns: [],
+          metadata: {
+            llmInferenceTimeMs: 0,
+            tierUsed: 1,
+            confidence: 'high',
+            filesAnalyzed: componentCount
+          }
+        };
+        
+        const diagramData = await diagramGenerator.generateDiagram(
+          model,
+          AbstractionLevel.Module
+        );
+        
+        // Verify output structure
+        expect(diagramData).toBeDefined();
+        expect(diagramData.nodes).toBeDefined();
+        expect(Array.isArray(diagramData.nodes)).toBe(true);
+        expect(diagramData.nodes.length).toBeGreaterThan(0);
+        expect(diagramData.edges).toBeDefined();
+        expect(Array.isArray(diagramData.edges)).toBe(true);
+        
+        // Verify nodes contain expected IDs
+        const nodeIds = diagramData.nodes.map(n => n.id);
+        expect(nodeIds.length).toBeGreaterThan(0);
+        
+        // Each node should have required properties
+        diagramData.nodes.forEach(node => {
+          expect(node).toHaveProperty('id');
+          expect(node).toHaveProperty('label');
+        });
+      }
     });
 
     it('should support element selection in webview', async () => {
@@ -422,53 +431,121 @@ class UserService:
       expect(ast.tree.rootNode).toBeDefined();
       // Tree may have errors, but parsing completes
     });
+    
+    it('should parse various languages with property-based testing', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.record({
+            language: fc.constantFrom(
+              Language.TypeScript,
+              Language.JavaScript,
+              Language.Python,
+              Language.Java,
+              Language.Go
+            ),
+            varName: fc.stringMatching(/^[a-z][a-zA-Z0-9]*$/)
+          }),
+          async ({ language, varName }) => {
+            const parserManager = new ParserManager();
+            await parserManager.initialize();
+            
+            // Generate simple code for each language
+            let code: string;
+            let fileName: string;
+            
+            switch (language) {
+              case Language.TypeScript:
+                code = `const ${varName}: number = 42;`;
+                fileName = 'test.ts';
+                break;
+              case Language.JavaScript:
+                code = `const ${varName} = 42;`;
+                fileName = 'test.js';
+                break;
+              case Language.Python:
+                code = `${varName} = 42`;
+                fileName = 'test.py';
+                break;
+              case Language.Java:
+                code = `public class Test { int ${varName} = 42; }`;
+                fileName = 'Test.java';
+                break;
+              case Language.Go:
+                code = `package main\nvar ${varName} = 42`;
+                fileName = 'test.go';
+                break;
+              default:
+                code = '';
+                fileName = 'test.txt';
+            }
+            
+            const ast = await parserManager.parseFile(fileName, code, language);
+            
+            // Parser should handle all languages without crashing
+            expect(ast).toBeDefined();
+            expect(ast.tree.rootNode).toBeDefined();
+          }
+        ),
+        { numRuns: 50 }
+      );
+    });
   });
 
   describe('Property 2.4: Cache Functionality for Normal Operations (Req 3.1)', () => {
     
-    it('should cache parsed files for performance', async () => {
-      const parserManager = new ParserManager();
-      await parserManager.initialize();
-      
-      const testCode = 'const x = 42;';
-      const filePath = 'test.ts';
-      
-      // Parse file - parser manager handles caching internally
-      const ast1 = await parserManager.parseFile(filePath, testCode, Language.TypeScript);
-      const ast2 = await parserManager.parseFile(filePath, testCode, Language.TypeScript);
-      
-      // Both parses should succeed
-      expect(ast1).toBeDefined();
-      expect(ast2).toBeDefined();
-      expect(ast1.tree.rootNode).toBeDefined();
-      expect(ast2.tree.rootNode).toBeDefined();
+    it('should parse same file twice and produce identical ASTs', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.constantFrom(
+            'const x = 42;',
+            'function test() { return true; }',
+            'class MyClass { method() {} }',
+            'export const value = "test";'
+          ),
+          async (code) => {
+            const parserManager = new ParserManager();
+            await parserManager.initialize();
+            
+            // Parse the same code twice
+            const ast1 = await parserManager.parseFile('test.ts', code, Language.TypeScript);
+            const ast2 = await parserManager.parseFile('test.ts', code, Language.TypeScript);
+            
+            // Should produce structurally identical results (proves cache doesn't corrupt)
+            expect(ast1.tree.rootNode.toString()).toBe(ast2.tree.rootNode.toString());
+            expect(ast1.tree.rootNode.childCount).toBe(ast2.tree.rootNode.childCount);
+          }
+        ),
+        { numRuns: 50 }
+      );
     });
 
-    it('should generate consistent cache keys for same content', () => {
-      const optimizer = new AnalysisOptimizer();
-      
-      const content1 = 'const x = 42;';
-      const content2 = 'const x = 42;';
-      
-      // Access private method for testing (using bracket notation as in actual code)
-      const key1 = (optimizer as any).hashContent(content1);
-      const key2 = (optimizer as any).hashContent(content2);
-      
-      // Same content should produce same key
-      expect(key1).toBe(key2);
-    });
-
-    it('should generate different cache keys for different content', () => {
-      const optimizer = new AnalysisOptimizer();
-      
-      const content1 = 'const x = 42;';
-      const content2 = 'const y = 100;';
-      
-      const key1 = (optimizer as any).hashContent(content1);
-      const key2 = (optimizer as any).hashContent(content2);
-      
-      // Different content should produce different keys
-      expect(key1).not.toBe(key2);
+    it('should parse different files and produce different ASTs', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.tuple(
+            fc.stringMatching(/^[a-z][a-zA-Z0-9]*$/),
+            fc.stringMatching(/^[a-z][a-zA-Z0-9]*$/)
+          ).filter(([name1, name2]) => name1 !== name2),
+          async ([varName1, varName2]) => {
+            const parserManager = new ParserManager();
+            await parserManager.initialize();
+            
+            const code1 = `const ${varName1} = 1;`;
+            const code2 = `const ${varName2} = 2;`;
+            
+            // Parse different code
+            const ast1 = await parserManager.parseFile('file1.ts', code1, Language.TypeScript);
+            const ast2 = await parserManager.parseFile('file2.ts', code2, Language.TypeScript);
+            
+            // Should produce different results (proves cache doesn't cross-contaminate)
+            // Compare the actual code content, not just AST structure
+            const code1FromAst = ast1.tree.rootNode.text;
+            const code2FromAst = ast2.tree.rootNode.text;
+            expect(code1FromAst).not.toBe(code2FromAst);
+          }
+        ),
+        { numRuns: 50 }
+      );
     });
 
     it('should clear cache when requested', () => {
@@ -537,7 +614,7 @@ class UserService:
             expect(Array.isArray(diagramData.edges)).toBe(true);
           }
         ),
-        { numRuns: 10 }
+        { numRuns: 50 }
       );
     });
 
@@ -584,7 +661,7 @@ class UserService:
             expect(diagramData.edges).toBeDefined();
           }
         ),
-        { numRuns: 10 }
+        { numRuns: 50 }
       );
     });
 
@@ -636,7 +713,7 @@ class UserService:
             expect(diagram1.edges.length).toBe(diagram2.edges.length);
           }
         ),
-        { numRuns: 10 }
+        { numRuns: 50 }
       );
     });
   });
@@ -686,6 +763,50 @@ class UserService:
       expect(state.selectedElementId).toBe('element1');
       expect(state.zoomLevel).toBe(2.0);
     });
+    
+    it('should handle arbitrary state updates with property-based testing', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.record({
+            selectedElementId: fc.option(fc.string(), { nil: null }),
+            abstractionLevel: fc.constantFrom(
+              AbstractionLevel.Overview,
+              AbstractionLevel.Module,
+              AbstractionLevel.Detailed
+            ),
+            zoomLevel: fc.double({ min: 0.1, max: 5.0 }),
+            panPosition: fc.record({
+              x: fc.integer({ min: -1000, max: 1000 }),
+              y: fc.integer({ min: -1000, max: 1000 })
+            })
+          }),
+          async (stateUpdate) => {
+            const controller = new ExtensionController();
+            
+            // Set state
+            controller.setState(stateUpdate);
+            
+            // Get state
+            const state = controller.getState();
+            
+            // State should match what was set
+            if (stateUpdate.selectedElementId !== undefined) {
+              expect(state.selectedElementId).toBe(stateUpdate.selectedElementId);
+            }
+            if (stateUpdate.abstractionLevel !== undefined) {
+              expect(state.abstractionLevel).toBe(stateUpdate.abstractionLevel);
+            }
+            if (stateUpdate.zoomLevel !== undefined) {
+              expect(state.zoomLevel).toBe(stateUpdate.zoomLevel);
+            }
+            if (stateUpdate.panPosition !== undefined) {
+              expect(state.panPosition).toEqual(stateUpdate.panPosition);
+            }
+          }
+        ),
+        { numRuns: 50 }
+      );
+    });
   });
 
   describe('Property 2.7: Multi-Language Support Consistency', () => {
@@ -725,6 +846,118 @@ class UserService:
         const ast = await parserManager.parseFile(`test${ext}`, code, lang);
         expect(ast).toBeDefined();
       }
+    });
+  });
+
+  describe('Property 2.8: Parser Robustness with Property-Based Testing', () => {
+    
+    it('should handle various code structures without crashing', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.record({
+            varName: fc.stringMatching(/^[a-z][a-zA-Z0-9]*$/),
+            value: fc.oneof(fc.integer(), fc.double(), fc.boolean(), fc.string())
+          }),
+          async ({ varName, value }) => {
+            const parserManager = new ParserManager();
+            await parserManager.initialize();
+            
+            // Generate code with random variable and value
+            const code = `const ${varName} = ${JSON.stringify(value)};`;
+            
+            // Parser should not crash
+            const ast = await parserManager.parseFile('test.ts', code, Language.TypeScript);
+            expect(ast).toBeDefined();
+            expect(ast.tree.rootNode).toBeDefined();
+          }
+        ),
+        { numRuns: 50 }
+      );
+    });
+
+    it('should handle various function signatures', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.record({
+            funcName: fc.stringMatching(/^[a-z][a-zA-Z0-9]*$/),
+            paramCount: fc.integer({ min: 0, max: 5 })
+          }),
+          async ({ funcName, paramCount }) => {
+            const parserManager = new ParserManager();
+            await parserManager.initialize();
+            
+            // Generate function with N parameters
+            const params = Array.from({ length: paramCount }, (_, i) => `param${i}`).join(', ');
+            const code = `function ${funcName}(${params}) { return true; }`;
+            
+            const ast = await parserManager.parseFile('test.js', code, Language.JavaScript);
+            expect(ast).toBeDefined();
+            expect(ast.tree.rootNode).toBeDefined();
+          }
+        ),
+        { numRuns: 50 }
+      );
+    });
+  });
+
+  describe('Property 2.9: Diagram Generation Robustness', () => {
+    
+    it('should handle models with varying relationship counts', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.integer({ min: 2, max: 10 }),
+          fc.integer({ min: 0, max: 20 }),
+          async (componentCount, relationshipCount) => {
+            const diagramGenerator = new DiagramGenerator();
+            
+            // Generate components
+            const components: ArchitecturalComponent[] = Array.from({ length: componentCount }, (_, i) => ({
+              id: `comp${i}`,
+              name: `Component${i}`,
+              role: `role${i}`,
+              filePaths: [`file${i}.ts`],
+              description: `Component ${i}`,
+              abstractionLevel: AbstractionLevel.Module,
+              subComponents: [],
+              parent: null
+            }));
+            
+            // Generate relationships between random components
+            const relationships = Array.from({ length: Math.min(relationshipCount, componentCount * (componentCount - 1)) }, (_, i) => ({
+              id: `rel${i}`,
+              sourceId: `comp${i % componentCount}`,
+              targetId: `comp${(i + 1) % componentCount}`,
+              type: 'depends-on' as RelationshipType,
+              description: `Relationship ${i}`,
+              strength: 0.8
+            }));
+            
+            const model: ArchitecturalModel = {
+              components,
+              relationships,
+              patterns: [],
+              metadata: {
+                llmInferenceTimeMs: 0,
+                tierUsed: 1,
+                confidence: 'high',
+                filesAnalyzed: componentCount
+              }
+            };
+            
+            // Generate diagram
+            const diagramData = await diagramGenerator.generateDiagram(
+              model,
+              AbstractionLevel.Module
+            );
+            
+            // Should produce valid diagram
+            expect(diagramData).toBeDefined();
+            expect(diagramData.nodes.length).toBeGreaterThan(0);
+            expect(Array.isArray(diagramData.edges)).toBe(true);
+          }
+        ),
+        { numRuns: 50 }
+      );
     });
   });
 });

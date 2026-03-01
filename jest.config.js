@@ -36,5 +36,6 @@ module.exports = {
     '^.+\\.ts$': 'ts-jest'
   },
   testTimeout: 30000,
-  verbose: true
+  verbose: true,
+  forceExit: true
 };

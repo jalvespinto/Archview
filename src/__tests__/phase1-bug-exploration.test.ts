@@ -1,8 +1,11 @@
 /**
- * Phase 1 Bug Condition Exploration Tests
+ * Phase 1 Post-Fix Regression Tests
  * 
- * UPDATED: These tests now verify the fixes are working correctly
- * After fixing the bugs, these tests should PASS
+ * These tests were written AFTER the fixes were applied and serve as regression guards.
+ * They verify that the fixes remain in place and test the corrected behavior.
+ * 
+ * Note: These tests never demonstrated the original bugs (fixes were applied in the same commit).
+ * For true bug exploration, tests must be written and run BEFORE fixes are applied.
  * 
  * Requirements: 2.1, 2.18, 2.19
  */
@@ -23,6 +26,41 @@ import {
 describe('Phase 1: Bug Condition Exploration Tests', () => {
   
   describe('Issue 1.1: Duplicate Error Classes - Type Collision FIXED', () => {
+    
+    it('should demonstrate cross-module instanceof collision (regression guard)', () => {
+      // REGRESSION TEST: Simulates what the bug looked like
+      // Before fix: Error classes existed in both ErrorHandler.ts and types/index.ts
+      // instanceof would fail when comparing errors from different sources
+      
+      // Simulate the bug scenario: two independent error classes with same name
+      class AnalysisErrorV1 extends Error {
+        constructor(message: string) {
+          super(message);
+          this.name = 'AnalysisError';
+        }
+      }
+      
+      class AnalysisErrorV2 extends Error {
+        constructor(message: string) {
+          super(message);
+          this.name = 'AnalysisError';
+        }
+      }
+      
+      // Create instances from different "sources"
+      const errorFromSource1 = new AnalysisErrorV1('Error from source 1');
+      const errorFromSource2 = new AnalysisErrorV2('Error from source 2');
+      
+      // This demonstrates the bug: instanceof fails across different class definitions
+      expect(errorFromSource1 instanceof AnalysisErrorV2).toBe(false);
+      expect(errorFromSource2 instanceof AnalysisErrorV1).toBe(false);
+      
+      // Both have same name but are different classes
+      expect(errorFromSource1.name).toBe('AnalysisError');
+      expect(errorFromSource2.name).toBe('AnalysisError');
+      
+      // This proves why the fix (single canonical source) is necessary
+    });
     
     it('should catch AnalysisError with instanceof check working correctly', () => {
       // AFTER FIX: instanceof should work correctly
