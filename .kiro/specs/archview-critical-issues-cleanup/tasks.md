@@ -163,7 +163,7 @@ These critical fixes address security vulnerabilities, performance issues, and f
     - _Preservation: Heuristic model building produces identical results_
     - _Requirements: 2.4_
 
-  - [ ] 7.5 Issue 1.5 - Fix parser initialization
+  - [x] 7.5 Issue 1.5 - Fix parser initialization
     - NOTE: createEmptyTree() IS used at lines 133, 148, 173 as fallback - cannot be deleted
     - Fix lines 367-370 in ParserManager.ts to call `parser.setLanguage(this.getDefaultLanguage())` before `parser.parse('')`
     - Add getDefaultLanguage() helper method that returns a default language grammar

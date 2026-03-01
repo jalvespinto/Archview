@@ -361,13 +361,23 @@ export class ParserManager {
   }
 
   /**
+   * Get default language grammar for fallback cases
+   * Uses TypeScript as the default since it's widely used
+   */
+  private getDefaultLanguage(): Parser.Language {
+    return TypeScript.typescript;
+  }
+
+  /**
    * Create an empty tree for error cases
    */
   private createEmptyTree(): Parser.Tree {
     // Create a minimal parser to generate an empty tree
     const tempParser = new Parser();
+    tempParser.setLanguage(this.getDefaultLanguage());
     return tempParser.parse('');
   }
+
 
   /**
    * Dispose of all parsers and free resources
