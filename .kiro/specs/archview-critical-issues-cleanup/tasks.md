@@ -128,7 +128,7 @@ These critical fixes address security vulnerabilities, performance issues, and f
 
 - [ ] 7. Fix Phase 2 issues - Critical fixes
 
-  - [ ] 7.1 Issue 1.2 - Fix eager extension activation
+  - [x] 7.1 Issue 1.2 - Fix eager extension activation
     - Open package.json
     - Change line 15 from `"activationEvents": ["*"]` to `"activationEvents": ["onCommand:archview.generateDiagram", "onCommand:archview.refreshDiagram", "onCommand:archview.exportDiagram"]`
     - Verify all three commands are registered in ExtensionController.ts activate() method
@@ -137,7 +137,7 @@ These critical fixes address security vulnerabilities, performance issues, and f
     - _Preservation: All commands continue to work when invoked_
     - _Requirements: 2.2_
 
-  - [ ] 7.2 PREREQUISITE - Install @types/vscode
+  - [x] 7.2 PREREQUISITE - Install @types/vscode
     - Run `npm install --save-dev @types/vscode` to add TypeScript definitions
     - This is REQUIRED before Issue 7.3 to avoid compilation errors
     - Verify package.json devDependencies includes @types/vscode
