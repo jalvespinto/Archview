@@ -1,7 +1,7 @@
 /**
  * AnalysisOptimizer - Optimize analysis performance
  * Requirements: 1.5, 9.3
- * 
+ *
  * Responsibilities:
  * - Use async batching for parallel file parsing
  * - Implement incremental parsing for file updates
@@ -11,6 +11,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as crypto from 'crypto';
 
 /**
  * File batch for processing
@@ -148,14 +149,7 @@ export class AnalysisOptimizer {
    * Hash content for incremental parsing
    */
   private hashContent(content: string): string {
-    // Simple hash function - in production, use crypto.createHash
-    let hash = 0;
-    for (let i = 0; i < content.length; i++) {
-      const char = content.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32-bit integer
-    }
-    return hash.toString(36);
+    return crypto.createHash('sha256').update(content).digest('hex');
   }
 
   /**

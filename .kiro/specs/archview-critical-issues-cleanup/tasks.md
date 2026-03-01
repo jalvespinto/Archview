@@ -182,7 +182,7 @@ These critical fixes address security vulnerabilities, performance issues, and f
     - _Preservation: Parsing produces identical results using async batching_
     - _Requirements: 2.6_
 
-  - [ ] 7.7 Issue 1.7 - Use secure hash function
+  - [x] 7.7 Issue 1.7 - Use secure hash function
     - In AnalysisOptimizer.ts: Add `import * as crypto from 'crypto'` at top
     - Replace custom hash at lines 196-205 with `return crypto.createHash('sha256').update(content).digest('hex')`
     - Remove old 32-bit hash implementation
