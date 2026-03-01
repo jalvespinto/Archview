@@ -32,10 +32,16 @@ import { FileWatcher, FileWatcherConfig, FileChangeEvent } from './analysis/File
 import { MemoryManager } from './performance/MemoryManager';
 
 // Kiro IDE API types (to be provided by Kiro runtime)
+interface Memento {
+  get<T>(key: string): T | undefined;
+  get<T>(key: string, defaultValue: T): T;
+  update(key: string, value: any): Thenable<void>;
+}
+
 interface ExtensionContext {
   subscriptions: any[];
-  globalState: any;
-  workspaceState: any;
+  globalState: Memento;
+  workspaceState: Memento;
 }
 
 interface Command {
@@ -780,9 +786,7 @@ export class ExtensionController {
     if (!this.context) return;
 
     try {
-      // TODO: Use actual Kiro state API
-      // In production: const savedState = this.context.globalState.get<Partial<ExtensionState>>('archview.state')
-      const savedState = undefined as Partial<ExtensionState> | undefined;
+      const savedState = this.context.globalState.get<Partial<ExtensionState>>('archview.state');
       
       if (savedState) {
         this.state = { ...this.state, ...savedState };
@@ -800,9 +804,7 @@ export class ExtensionController {
     if (!this.context) return;
 
     try {
-      // TODO: Use actual Kiro state API
-      // In production: this.context.globalState.update('archview.state', this.state)
-      console.log('State saved');
+      await this.context.globalState.update('archview.state', this.state);
     } catch (error) {
       console.error('Failed to save state:', error);
     }

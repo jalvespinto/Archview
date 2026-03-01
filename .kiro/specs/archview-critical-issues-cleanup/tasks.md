@@ -281,7 +281,7 @@ These medium severity fixes address reliability, performance, security issues, a
     - _Preservation: Debounce, filtering, and lifecycle behavior must be preserved_
     - _Requirements: 2.8_
 
-  - [ ] 11.2 Issue 1.9 - Implement state persistence
+  - [x] 11.2 Issue 1.9 - Implement state persistence
     - DECISION: Implement (not remove). saveState() is called from 5 places in ExtensionController (activate line 128, deactivate line 140/155, generateDiagram line 471, and after analysis line 623). loadState() is called on activate (line 128). Removing them means hunting down and deleting all call sites. The fix is a 2-line swap.
     - Fix loadState() at lines 779-793 in ExtensionController.ts
       - Replace `const savedState = undefined as Partial<ExtensionState> | undefined` with `const savedState = this.context.globalState.get<Partial<ExtensionState>>('archview.state')`
@@ -294,7 +294,7 @@ These medium severity fixes address reliability, performance, security issues, a
     - _Preservation: All existing saveState/loadState call sites continue to work_
     - _Requirements: 2.9_
 
-  - [ ] 11.3 Issue 1.10 - Fix workspace root detection
+  - [-] 11.3 Issue 1.10 - Fix workspace root detection
     - In ExtensionController.ts: Change getWorkspaceRoot() at lines 666-670
     - Current signature: `private async getWorkspaceRoot(): Promise<string | null>`
     - Replace `return process.cwd()` with `return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd()`
