@@ -18,6 +18,7 @@ import {
   Component
 } from '../types';
 import { ParsedAST, ParserManager } from './ParserManager';
+import { findNodeInTree } from '../utils/astUtils';
 
 /**
  * Context for relationship extraction
@@ -101,7 +102,7 @@ export class RelationshipExtractor {
     });
 
     for (const classNode of classNodes) {
-      const treeNode = this.findNodeInTree(rootNode, classNode);
+      const treeNode = findNodeInTree(rootNode, classNode);
       if (treeNode) {
         const baseClasses = this.extractPythonBaseClasses(treeNode, ast.sourceCode);
         for (const baseClass of baseClasses) {
@@ -173,7 +174,7 @@ export class RelationshipExtractor {
     });
 
     for (const callNode of callNodes) {
-      const treeNode = this.findNodeInTree(rootNode, callNode);
+      const treeNode = findNodeInTree(rootNode, callNode);
       if (treeNode) {
         const requirePath = this.extractJSRequire(treeNode, ast.sourceCode);
         if (requirePath) {
@@ -193,7 +194,7 @@ export class RelationshipExtractor {
     });
 
     for (const classNode of classNodes) {
-      const treeNode = this.findNodeInTree(rootNode, classNode);
+      const treeNode = findNodeInTree(rootNode, classNode);
       if (treeNode) {
         const extendsClass = this.extractJSExtends(treeNode, ast.sourceCode);
         if (extendsClass) {
@@ -223,7 +224,7 @@ export class RelationshipExtractor {
     // Extract function call relationships
     const callCounts = new Map<string, number>();
     for (const callNode of callNodes) {
-      const treeNode = this.findNodeInTree(rootNode, callNode);
+      const treeNode = findNodeInTree(rootNode, callNode);
       if (treeNode) {
         const functionName = this.extractJSFunctionCall(treeNode, ast.sourceCode);
         if (functionName) {
@@ -276,7 +277,7 @@ export class RelationshipExtractor {
     });
 
     for (const classNode of classNodes) {
-      const treeNode = this.findNodeInTree(rootNode, classNode);
+      const treeNode = findNodeInTree(rootNode, classNode);
       if (treeNode) {
         const extendsClass = this.extractJavaExtends(treeNode, ast.sourceCode);
         if (extendsClass) {
@@ -307,7 +308,7 @@ export class RelationshipExtractor {
 
     const callCounts = new Map<string, number>();
     for (const callNode of callNodes) {
-      const treeNode = this.findNodeInTree(rootNode, callNode);
+      const treeNode = findNodeInTree(rootNode, callNode);
       if (treeNode) {
         const methodName = this.extractJavaMethodCall(treeNode, ast.sourceCode);
         if (methodName) {
@@ -361,7 +362,7 @@ export class RelationshipExtractor {
 
     const callCounts = new Map<string, number>();
     for (const callNode of callNodes) {
-      const treeNode = this.findNodeInTree(rootNode, callNode);
+      const treeNode = findNodeInTree(rootNode, callNode);
       if (treeNode) {
         const functionName = this.extractGoFunctionCall(treeNode, ast.sourceCode);
         if (functionName) {
@@ -768,33 +769,6 @@ export class RelationshipExtractor {
     return null;
   }
 
-  // ============================================================================
-  // Helper Methods
-  // ============================================================================
-
-  private findNodeInTree(root: Parser.SyntaxNode, target: any): Parser.SyntaxNode | null {
-    const traverse = (node: Parser.SyntaxNode): Parser.SyntaxNode | null => {
-      if (
-        node.type === target.type &&
-        node.startPosition.row === target.startPosition.row &&
-        node.startPosition.column === target.startPosition.column
-      ) {
-        return node;
-      }
-
-      for (let i = 0; i < node.childCount; i++) {
-        const child = node.child(i);
-        if (child) {
-          const result = traverse(child);
-          if (result) return result;
-        }
-      }
-
-      return null;
-    };
-
-    return traverse(root);
-  }
 
   private generateRelationshipId(): string {
     return `relationship_${this.relationshipIdCounter++}`;

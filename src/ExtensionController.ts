@@ -240,8 +240,17 @@ export class ExtensionController {
    * Requirements: 8.3, 8.4, 8.5
    */
   private registerConfigurationListener(): void {
-    // TODO: Use actual Kiro configuration API
-    // In production: vscode.workspace.onDidChangeConfiguration(e => {
+    if (!this.context) {
+      return;
+    }
+    
+    this.context.subscriptions.push(
+      vscode.workspace.onDidChangeConfiguration(e => {
+        if (e.affectsConfiguration('archview')) {
+          this.handleConfigurationChange();
+        }
+      })
+    );
     //   if (e.affectsConfiguration('archview')) {
     //     this.handleConfigurationChange();
     //   }
@@ -670,10 +679,9 @@ export class ExtensionController {
    * Get workspace root path
    */
   private async getWorkspaceRoot(): Promise<string | null> {
-    // TODO: Use actual Kiro workspace API
-    // In production: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
-    return process.cwd();
-  }
+      // Use actual workspace folder path, fallback to process.cwd()
+      return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+    }
 
   /**
    * Get current state (for testing purposes)
@@ -696,13 +704,12 @@ export class ExtensionController {
    * Requirements: 8.3, 8.4, 8.5
    */
   private getAnalysisConfig(rootPath: string): AnalysisConfig {
-    // TODO: Read from Kiro configuration API
-    // In production: const config = vscode.workspace.getConfiguration('archview')
+    const config = vscode.workspace.getConfiguration('archview');
     
-    // For now, use defaults from package.json
-    const config = {
-      includePatterns: ['**/*.ts', '**/*.js', '**/*.py', '**/*.java', '**/*.go'],
-      excludePatterns: [
+    return {
+      rootPath,
+      includePatterns: config.get<string[]>('includePatterns', ['**/*.ts', '**/*.js', '**/*.py', '**/*.java', '**/*.go']),
+      excludePatterns: config.get<string[]>('excludePatterns', [
         '**/node_modules/**',
         '**/.git/**',
         '**/dist/**',
@@ -713,25 +720,13 @@ export class ExtensionController {
         '**/target/**',
         '**/.idea/**',
         '**/.vscode/**'
-      ],
-      maxFiles: 1000,
-      maxDepth: 10,
-      languages: ['typescript', 'javascript', 'python', 'java', 'go'],
-      aiEnabled: true,
-      autoRefresh: false,
-      autoRefreshDebounce: 10000
-    };
-
-    return {
-      rootPath,
-      includePatterns: config.includePatterns,
-      excludePatterns: config.excludePatterns,
-      maxFiles: config.maxFiles,
-      maxDepth: config.maxDepth,
-      languages: this.mapLanguageStrings(config.languages),
-      aiEnabled: config.aiEnabled,
-      autoRefresh: config.autoRefresh,
-      autoRefreshDebounce: config.autoRefreshDebounce
+      ]),
+      maxFiles: config.get<number>('maxFiles', 1000),
+      maxDepth: config.get<number>('maxDepth', 10),
+      languages: this.mapLanguageStrings(config.get<string[]>('languages', ['typescript', 'javascript', 'python', 'java', 'go'])),
+      aiEnabled: config.get<boolean>('aiEnabled', true),
+      autoRefresh: config.get<boolean>('autoRefresh', false),
+      autoRefreshDebounce: config.get<number>('autoRefreshDebounce', 10000)
     };
   }
 

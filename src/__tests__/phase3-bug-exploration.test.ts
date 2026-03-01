@@ -84,30 +84,91 @@ function stripComments(source: string): string {
  * Finds the method by signature pattern, then captures everything between
  * the opening and final closing brace at the same nesting depth.
  * Returns the full method text including signature, or null if not found.
+ * 
+ * FIXED: Now properly handles return types with braces by looking for the
+ * method body brace (the one at the same indentation level as the method signature).
  */
 function extractMethodBody(source: string, signaturePattern: RegExp): string | null {
   const match = signaturePattern.exec(source);
   if (!match) return null;
 
   const startIndex = match.index;
+  
+  // Find the opening brace of the method body
+  // Strategy: Look for a brace that comes after the method signature line
+  // The method signature ends with either `) {` or `): ReturnType {`
+  let i = startIndex;
+  let foundMethodBodyStart = false;
+  let methodBodyStart = -1;
+  
+  // First, skip past the method signature to find where it ends
+  // Look for the pattern: closing paren, optional return type, then opening brace
+  while (i < source.length) {
+    if (source[i] === '(') {
+      // Found opening paren of parameters, now find the matching closing paren
+      let parenDepth = 1;
+      i++;
+      while (i < source.length && parenDepth > 0) {
+        if (source[i] === '(') parenDepth++;
+        else if (source[i] === ')') parenDepth--;
+        i++;
+      }
+      // Now we're past the parameters, look for the method body opening brace
+      // Skip past return type if present (`: Type`)
+      while (i < source.length) {
+        if (source[i] === '{') {
+          // Check if this brace is part of a return type or the method body
+          // If we see a newline before this brace, it's likely the method body
+          // If the brace is on the same line as the signature, it's the method body
+          const textSinceParams = source.substring(i - 20, i);
+          if (textSinceParams.includes('\n')) {
+            // There's a newline, so this is likely the method body
+            methodBodyStart = i;
+            foundMethodBodyStart = true;
+            break;
+          } else {
+            // No newline, check if this looks like a return type brace
+            // Return type braces are usually like `: { prop: type }`
+            // Method body braces are usually like `) {` or `): void {`
+            const prevChars = source.substring(Math.max(0, i - 10), i).trim();
+            if (prevChars.endsWith(')') || prevChars.endsWith('void') || prevChars.endsWith('Promise<void>')) {
+              // This is the method body brace
+              methodBodyStart = i;
+              foundMethodBodyStart = true;
+              break;
+            } else {
+              // This might be a return type brace, skip it
+              i++;
+              continue;
+            }
+          }
+        }
+        i++;
+      }
+      break;
+    }
+    i++;
+  }
+  
+  if (!foundMethodBodyStart || methodBodyStart === -1) return null;
+  
+  // Now count braces from the method body start to find the end
   let braceDepth = 0;
-  let foundOpen = false;
-  let endIndex = startIndex;
-
-  for (let i = startIndex; i < source.length; i++) {
-    if (source[i] === '{') {
+  let endIndex = methodBodyStart;
+  
+  for (let j = methodBodyStart; j < source.length; j++) {
+    if (source[j] === '{') {
       braceDepth++;
-      foundOpen = true;
-    } else if (source[i] === '}') {
+    } else if (source[j] === '}') {
       braceDepth--;
-      if (foundOpen && braceDepth === 0) {
-        endIndex = i + 1;
+      if (braceDepth === 0) {
+        endIndex = j + 1;
         break;
       }
     }
   }
 
-  if (!foundOpen) return null;
+  if (braceDepth !== 0) return null;
   return source.substring(startIndex, endIndex);
 }
 
@@ -263,7 +324,9 @@ describe('Phase 3: Bug Condition Exploration Tests', () => {
         const lines = methodBody.split('\n').map(l => l.trim()).filter(l => l.length > 0);
         const returnLines = lines.filter(l => l.startsWith('return'));
 
-        const onlyReturnsCwd = returnLines.length === 1 && returnLines[0].includes('process.cwd()');
+        const onlyReturnsCwd = returnLines.length === 1 && 
+          returnLines[0].includes('process.cwd()') && 
+          !returnLines[0].includes('workspaceFolders');
 
         // EXPECTED TO FAIL: Only return statement is `return process.cwd()`
         expect(onlyReturnsCwd).toBe(false);

@@ -186,6 +186,7 @@
   "dependencies": {
     "cytoscape": "^3.28.0",
     "cytoscape-dagre": "^2.5.0",
+    "minimatch": "^10.2.4",
     "tree-sitter": "^0.21.0",
     "tree-sitter-go": "^0.21.0",
     "tree-sitter-java": "^0.21.0",
@@ -196,6 +197,7 @@
   "devDependencies": {
     "@types/cytoscape": "^3.21.9",
     "@types/jest": "^29.5.0",
+    "@types/minimatch": "^5.1.2",
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.109.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",

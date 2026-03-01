@@ -14,6 +14,7 @@ export class WebviewManager {
   private panel: any = null;
   private messageHandlers: Map<string, (message: WebviewMessage) => void> = new Map();
   private isDisposed = false;
+  private messageListenerDisposable: vscode.Disposable | undefined;
 
   /**
    * Create and initialize webview panel
@@ -69,9 +70,10 @@ export class WebviewManager {
    * Register message handler
    * Requirements: 6.5
    */
-  onMessage(handler: (message: WebviewMessage) => void): void {
+  onMessage(handler: (message: WebviewMessage) => void): { dispose: () => void } {
     const handlerId = `handler_${Date.now()}_${Math.random()}`;
     this.messageHandlers.set(handlerId, handler);
+    return { dispose: () => this.messageHandlers.delete(handlerId) };
   }
 
   /**
@@ -113,6 +115,23 @@ export class WebviewManager {
     return this.panel !== null && !this.isDisposed;
   }
 
+  /**
+   * Dispose all resources
+   */
+  dispose(): void {
+    // Dispose message listener
+    this.messageListenerDisposable?.dispose();
+    this.messageListenerDisposable = undefined;
+
+    // Clear message handlers
+    this.messageHandlers.clear();
+
+    // Dispose panel if active
+    if (this.panel) {
+      this.panel.dispose();
+    }
+  }
+
   // ============================================================================
   // Private Methods
   // ============================================================================
@@ -145,7 +164,11 @@ export class WebviewManager {
   private setupMessageHandling(): void {
     if (!this.panel) return;
 
-    this.panel.webview.onDidReceiveMessage((message: WebviewMessage) => {
+    // Dispose existing listener before creating a new one
+    this.messageListenerDisposable?.dispose();
+
+    // Store the disposable for cleanup
+    this.messageListenerDisposable = this.panel.webview.onDidReceiveMessage((message: WebviewMessage) => {
       // Notify all registered handlers
       this.messageHandlers.forEach(handler => {
         try {
@@ -164,6 +187,8 @@ export class WebviewManager {
     this.isDisposed = true;
     this.panel = null;
     this.messageHandlers.clear();
+    this.messageListenerDisposable?.dispose();
+    this.messageListenerDisposable = undefined;
   }
 
   /**
@@ -391,7 +416,7 @@ export class WebviewManager {
       (function() {
         const vscode = acquireVsCodeApi();
         let currentDiagramData = null;
-        
+
         function initialize() {
           document.getElementById('zoom-in').addEventListener('click', () => {
             console.log('Zoom in');
@@ -414,7 +439,7 @@ export class WebviewManager {
           document.getElementById('refresh').addEventListener('click', () => {
             vscode.postMessage({ type: 'refreshRequested' });
           });
-          
+
           window.addEventListener('message', (event) => {
             const message = event.data;
             if (message.type === 'initialize') {
@@ -427,10 +452,10 @@ export class WebviewManager {
               document.querySelector('.error-message').textContent = message.message;
             }
           });
-          
+
           vscode.postMessage({ type: 'ready' });
         }
-        
+
         if (document.readyState === 'loading') {
           document.addEventListener('DOMContentLoaded', initialize);
         } else {

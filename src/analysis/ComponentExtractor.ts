@@ -19,6 +19,7 @@ import {
   ComponentMetadata
 } from '../types';
 import { ParsedAST, ParserManager } from './ParserManager';
+import { findNodeInTree } from '../utils/astUtils';
 
 /**
  * Context for component extraction
@@ -119,7 +120,7 @@ export class ComponentExtractor {
       moduleComponent.children.push(classComponent.id);
 
       // Extract methods (abstraction level 3)
-      const classTreeNode = this.findNodeInTree(rootNode, classNode);
+      const classTreeNode = findNodeInTree(rootNode, classNode);
       if (classTreeNode) {
         const methodNodes = this.findDescendantsByType(classTreeNode, 'function_definition');
 
@@ -222,7 +223,7 @@ export class ComponentExtractor {
       moduleComponent.children.push(classComponent.id);
 
       // Extract methods (abstraction level 3)
-      const classTreeNode = this.findNodeInTree(rootNode, classNode);
+      const classTreeNode = findNodeInTree(rootNode, classNode);
       if (classTreeNode) {
         const methodNodes = this.findDescendantsByType(classTreeNode, 'method_definition');
 
@@ -354,7 +355,7 @@ export class ComponentExtractor {
       packageComponent.children.push(classComponent.id);
 
       // Extract methods (abstraction level 3)
-      const classTreeNode = this.findNodeInTree(rootNode, classNode);
+      const classTreeNode = findNodeInTree(rootNode, classNode);
       if (classTreeNode) {
         const methodNodes = this.findDescendantsByType(classTreeNode, 'method_declaration');
 
@@ -740,34 +741,6 @@ export class ComponentExtractor {
     return null;
   }
 
-  // ============================================================================
-  // Helper Methods - AST Navigation
-  // ============================================================================
-
-  private findNodeInTree(root: Parser.SyntaxNode, target: any): Parser.SyntaxNode | null {
-    // Find the actual Tree-sitter node corresponding to an ExtractedNode
-    const traverse = (node: Parser.SyntaxNode): Parser.SyntaxNode | null => {
-      if (
-        node.type === target.type &&
-        node.startPosition.row === target.startPosition.row &&
-        node.startPosition.column === target.startPosition.column
-      ) {
-        return node;
-      }
-
-      for (let i = 0; i < node.childCount; i++) {
-        const child = node.child(i);
-        if (child) {
-          const result = traverse(child);
-          if (result) return result;
-        }
-      }
-
-      return null;
-    };
-
-    return traverse(root);
-  }
 
   private findChildrenByType(node: Parser.SyntaxNode | null, type: string): Parser.SyntaxNode[] {
     if (!node) return [];

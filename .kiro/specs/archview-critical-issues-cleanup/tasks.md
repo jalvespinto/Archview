@@ -294,7 +294,7 @@ These medium severity fixes address reliability, performance, security issues, a
     - _Preservation: All existing saveState/loadState call sites continue to work_
     - _Requirements: 2.9_
 
-  - [-] 11.3 Issue 1.10 - Fix workspace root detection
+  - [x] 11.3 Issue 1.10 - Fix workspace root detection
     - In ExtensionController.ts: Change getWorkspaceRoot() at lines 666-670
     - Current signature: `private async getWorkspaceRoot(): Promise<string | null>`
     - Replace `return process.cwd()` with `return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd()`
@@ -305,7 +305,7 @@ These medium severity fixes address reliability, performance, security issues, a
     - _Preservation: Workspace detection returns a valid absolute path for normal cases_
     - _Requirements: 2.10_
 
-  - [ ] 11.4 Issue 1.11 - Implement configuration reading
+  - [x] 11.4 Issue 1.11 - Implement configuration reading
     - NOTE: package.json already has complete configuration schema — do NOT add it again
     - NOTE: handleConfigurationChange() ALREADY EXISTS at lines 250-262 and works correctly (invalidates cache, reinitializes watcher) — do NOT re-create it
     - In ExtensionController.ts: Fix getAnalysisConfig() at lines 692-730
@@ -323,7 +323,7 @@ These medium severity fixes address reliability, performance, security issues, a
     - _Preservation: Default values remain the same, now user-configurable_
     - _Requirements: 2.11_
 
-  - [ ] 11.5 Issue 1.12 - Remove artificial delay
+  - [x] 11.5 Issue 1.12 - Remove artificial delay
     - In MemoryManager.ts: Fix releaseMemory() at lines 175-195
     - Current code: executes cleanup, calls forceGarbageCollection(), then creates a setInterval polling loop (line 186) that waits until `RELEASE_TIMEOUT_MS` (2000ms, defined at line 39) has elapsed
     - Fix: Remove the `return new Promise(...)` wrapping the setInterval polling loop (lines 185-194)
@@ -335,7 +335,7 @@ These medium severity fixes address reliability, performance, security issues, a
     - _Preservation: Cleanup callback still executed, forceGC still called, just no artificial wait_
     - _Requirements: 2.12_
 
-  - [ ] 11.6 Issue 1.13 - Fix message handler memory leak
+  - [x] 11.6 Issue 1.13 - Fix message handler memory leak
     - In WebviewManager.ts (already imports vscode at line 7):
     - Current state: `messageHandlers` is a `Map<string, (message: WebviewMessage) => void>` (line 15) — this tracks user-registered handlers but NOT the vscode onDidReceiveMessage disposable
     - The actual leak: `setupMessageHandling()` (lines 145-158, NOT "setupWebviewMessageHandling" or line 89) calls `this.panel.webview.onDidReceiveMessage()` which returns a disposable, but the disposable is never stored or disposed. Calling setupMessageHandling() multiple times leaks listeners.
@@ -355,7 +355,7 @@ These medium severity fixes address reliability, performance, security issues, a
     - _Preservation: Message handling registration and delivery work identically_
     - _Requirements: 2.13_
 
-  - [ ] 11.7 Issue 1.14 - Replace custom glob with minimatch
+  - [x] 11.7 Issue 1.14 - Replace custom glob with minimatch
     - DECISION: Use minimatch library (not patch custom regex). Both FileScanner.ts and FileWatcher.ts have custom glob-to-regex implementations (6 references each). A single `npm install minimatch` replaces both with a battle-tested library, eliminating ReDoS risk and edge-case mismatches.
     - PREREQUISITE: Run `npm install minimatch` and `npm install -D @types/minimatch` (minimatch is NOT currently a dependency)
     - In FileScanner.ts:
@@ -369,7 +369,7 @@ These medium severity fixes address reliability, performance, security issues, a
     - _Preservation: Normal glob patterns produce identical match results_
     - _Requirements: 2.14_
 
-  - [ ] 11.8 Issue 1.18 - Deduplicate findNodeInTree()
+  - [x] 11.8 Issue 1.18 - Deduplicate findNodeInTree()
     - Both ComponentExtractor.ts (line 747) and RelationshipExtractor.ts (line 775) contain identical `private findNodeInTree()` implementations
     - Create `src/utils/astUtils.ts` with a shared `findNodeInTree()` function:
       - `export function findNodeInTree(root: Parser.SyntaxNode, target: any): Parser.SyntaxNode | null`
@@ -388,7 +388,7 @@ These medium severity fixes address reliability, performance, security issues, a
     - _Preservation: findNodeInTree() behavior identical — same implementation, just shared_
     - _Requirements: 2.18_
 
-  - [ ] 11.9 Verify Phase 3 exploration tests now pass
+  - [x] 11.9 Verify Phase 3 exploration tests now pass
     - **Property 1: Expected Behavior** - Medium Severity Issues Fixed
     - **IMPORTANT**: Re-run the SAME tests from task 9 — do NOT write new tests
     - NOTE: Task 9 tests use comment-stripping before checking for code patterns, so fixes must be real executable code, not just rearranged comments
@@ -403,7 +403,7 @@ These medium severity fixes address reliability, performance, security issues, a
     - Verify glob patterns use vetted library
     - _Requirements: 2.8, 2.9, 2.10, 2.11, 2.12, 2.13, 2.14_
 
-  - [ ] 11.10 Verify Phase 3 preservation tests still pass
+  - [x] 11.10 Verify Phase 3 preservation tests still pass
     - **Property 2: Preservation** - Core Functionality Unchanged
     - **IMPORTANT**: Re-run the SAME tests from task 10 — do NOT write new tests
     - Run preservation property tests from step 10

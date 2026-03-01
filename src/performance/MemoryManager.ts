@@ -36,7 +36,6 @@ export class MemoryManager {
   private baselineMemory: MemorySnapshot | null = null;
   private monitoringInterval: NodeJS.Timeout | null = null;
   private readonly MONITORING_INTERVAL_MS = 1000; // Check every second
-  private readonly RELEASE_TIMEOUT_MS = 2000; // 2 seconds to release memory
 
   constructor(limits?: Partial<MemoryLimits>) {
     this.limits = {
@@ -166,32 +165,18 @@ export class MemoryManager {
   }
 
   /**
-   * Release memory within timeout
+   * Release memory
    * Requirements: 9.4
    * 
    * @param cleanup Cleanup function to release resources
    * @returns Promise that resolves when memory is released
    */
   async releaseMemory(cleanup: () => void | Promise<void>): Promise<void> {
-    const startTime = Date.now();
-    
     // Execute cleanup
     await cleanup();
     
     // Force garbage collection if available
     this.forceGarbageCollection();
-    
-    // Wait for memory to be released (up to 2 seconds)
-    return new Promise((resolve) => {
-      const checkInterval = setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        
-        if (elapsed >= this.RELEASE_TIMEOUT_MS) {
-          clearInterval(checkInterval);
-          resolve();
-        }
-      }, 100);
-    });
   }
 
   /**

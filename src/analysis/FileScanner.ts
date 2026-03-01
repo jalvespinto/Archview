@@ -12,6 +12,7 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { minimatch } from 'minimatch';
 import { Language } from '../types';
 
 export interface ScanResult {
@@ -314,41 +315,10 @@ export class FileScanner {
   }
   
   /**
-   * Simple glob pattern matching
+   * Simple glob pattern matching using minimatch library
    * Supports: *, **, ?, and basic path matching
    */
   private matchGlobPattern(filePath: string, pattern: string): boolean {
-    // Handle leading **/ - should match zero or more path segments
-    if (pattern.startsWith('**/')) {
-      const rest = pattern.substring(3);
-      // Try matching with and without prefix
-      return this.matchGlobPattern(filePath, rest) || 
-             filePath.includes('/') && this.matchGlobPattern(filePath.substring(filePath.indexOf('/') + 1), pattern);
-    }
-    
-    // Handle trailing /** - should match the directory and everything under it
-    if (pattern.endsWith('/**')) {
-      const prefix = pattern.substring(0, pattern.length - 3);
-      return filePath === prefix || filePath.startsWith(prefix + '/');
-    }
-    
-    // Convert glob pattern to regex
-    let regexPattern = pattern
-      // Escape special regex characters except * and ?
-      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-      // Replace ** with placeholder
-      .replace(/\*\*/g, '__DOUBLESTAR__')
-      // Replace * with regex for any characters except /
-      .replace(/\*/g, '[^/]*')
-      // Replace ? with regex for single character
-      .replace(/\?/g, '[^/]')
-      // Replace placeholder with regex for any characters including /
-      .replace(/__DOUBLESTAR__/g, '.*');
-    
-    // Add anchors
-    regexPattern = `^${regexPattern}$`;
-    
-    const regex = new RegExp(regexPattern);
-    return regex.test(filePath);
+    return minimatch(filePath, pattern, { dot: true });
   }
 }
