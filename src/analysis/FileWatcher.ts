@@ -9,6 +9,8 @@
  * - Respect autoRefresh configuration setting
  */
 
+import * as vscode from 'vscode';
+
 export interface FileWatcherConfig {
   autoRefresh: boolean;
   autoRefreshDebounce: number; // milliseconds, default: 10000 (10 seconds)
@@ -27,7 +29,7 @@ export type FileChangeCallback = (event: FileChangeEvent) => void;
  * FileWatcher service for detecting file changes
  */
 export class FileWatcher {
-  private watchers: any[] = [];
+  private watchers: vscode.FileSystemWatcher[] = [];
   private changedFiles: Set<string> = new Set();
   private debounceTimer: NodeJS.Timeout | null = null;
   private config: FileWatcherConfig;
@@ -125,18 +127,21 @@ export class FileWatcher {
    * Requirements: 11.2
    */
   private setupWatchers(workspaceRoot: string): void {
-    // This is a placeholder for the actual Kiro API integration
-    // In a real implementation, this would use:
-    // const watcher = workspace.createFileSystemWatcher(pattern);
-    // watcher.onDidCreate(uri => this.handleFileChange(uri.fsPath));
-    // watcher.onDidChange(uri => this.handleFileChange(uri.fsPath));
-    // watcher.onDidDelete(uri => this.handleFileChange(uri.fsPath));
-    
-    // For now, we'll create a mock structure that can be tested
-    // and replaced with actual API calls when integrated
-    
-    // Note: In actual implementation, we would create watchers for include patterns
-    // and filter out exclude patterns in the handler
+    // Create watchers for each include pattern
+    for (const pattern of this.config.includePatterns) {
+      // Create a file system watcher for this pattern
+      const watcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(workspaceRoot, pattern)
+      );
+
+      // Register handlers for file changes
+      watcher.onDidChange(uri => this.handleFileChange(uri.fsPath));
+      watcher.onDidCreate(uri => this.handleFileChange(uri.fsPath));
+      watcher.onDidDelete(uri => this.handleFileChange(uri.fsPath));
+
+      // Store watcher for disposal
+      this.watchers.push(watcher);
+    }
   }
 
   /**

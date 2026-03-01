@@ -231,29 +231,36 @@ These medium severity fixes address reliability, performance, security issues, a
   - **CRITICAL**: These tests MUST FAIL on unfixed code - failures confirm the bugs exist
   - **DO NOT attempt to fix the tests or the code when they fail**
   - **GOAL**: Surface counterexamples that demonstrate the bugs exist
-  - Test Issue 1.8: Instantiate FileWatcher, call setupWatchers(), modify watched file - assert change detected (will fail, empty implementation)
-  - Test Issue 1.9: Call saveState() with test data, restart extension, call loadState() - assert state persisted (will fail, stub implementation)
-  - Test Issue 1.10: Call getWorkspaceRoot() in workspace - assert returns workspace folder path (will fail, returns process.cwd())
-  - Test Issue 1.11: Set archview.maxFiles in settings, call getAnalysisConfig() - assert returns configured value (will fail, hardcoded default). NOTE: package.json already has configuration schema.
-  - Test Issue 1.12: Measure time for releaseMemory() - assert completes in < 500ms (will fail, takes 2000ms due to polling loop)
-  - Test Issue 1.13: Call setupWebviewMessageHandling() 100 times, check handler count - assert handlers cleaned up (will fail, accumulate)
-  - Test Issue 1.14: Pass malicious glob pattern to globToRegex() - assert safely escaped (may fail, injection risk)
+  - **METHODOLOGY**: Tests use a state-machine comment stripper + brace-counting method extraction so that TODO comments are not mistaken for real code
+  - Test Issue 1.8: Read FileWatcher.ts, strip comments, verify setupWatchers() has executable code (will fail — body is empty after comment removal)
+  - Test Issue 1.9: Read ExtensionController.ts, strip comments, verify loadState() calls globalState.get and saveState() calls globalState.update (will fail — only in comments; actual code hardcodes `undefined` and logs `'State saved'`)
+  - Test Issue 1.10: Read ExtensionController.ts, strip comments, verify getWorkspaceRoot() uses workspaceFolders and does not solely return process.cwd() (will fail — only process.cwd())
+  - Test Issue 1.11: Read ExtensionController.ts, strip comments, verify getAnalysisConfig() calls getConfiguration and registerConfigurationListener() uses onDidChangeConfiguration (will fail — both are no-ops). Also verify package.json config schema exists (will pass — prerequisite already present).
+  - Test Issue 1.12: Read MemoryManager.ts, verify releaseMemory() does not use setInterval or RELEASE_TIMEOUT_MS; also measure runtime < 500ms (will fail — has polling loop, takes ~2000ms)
+  - Test Issue 1.13: Read WebviewManager.ts, verify setupMessageHandling() disposes old handlers, onMessage() returns a disposable, and a public dispose() method exists (will fail — no disposal mechanism)
+  - Test Issue 1.14: Read FileScanner.ts, verify matchGlobPattern() uses minimatch/picomatch instead of custom `new RegExp()` construction (will fail — uses custom regex)
+  - **NOTE**: Issue 1.18 (findNodeInTree deduplication) is not tested here — add tests before implementing 11.8
   - Run tests on UNFIXED code
-  - **EXPECTED OUTCOME**: Tests FAIL (this is correct - it proves the bugs exist)
-  - Document counterexamples found
+  - **ACTUAL OUTCOME**: 18 FAIL, 1 PASS (package.json schema check) — all 7 bugs confirmed
+  - Counterexamples documented in `src/__tests__/phase3-bug-exploration-results.md`
   - _Requirements: 2.8, 2.9, 2.10, 2.11, 2.12, 2.13, 2.14_
 
 - [x] 10. Write preservation property tests for Phase 3 (BEFORE implementing fixes)
   - **Property 2: Preservation** - Core Functionality Unchanged
   - **IMPORTANT**: Follow observation-first methodology
   - Observe behavior on UNFIXED code for normal operations
-  - Test workspace detection for normal cases
-  - Test configuration reading for default values
-  - Test memory cleanup functionality (just timing changes)
-  - Test glob pattern matching for normal patterns
-  - Write property-based tests capturing observed behavior
+  - Test workspace detection: returns valid absolute path, consistent across calls (2 tests)
+  - Test configuration reading: valid shape with reasonable defaults, deterministic, common patterns included (3 tests)
+  - Test memory cleanup: sync/async callbacks execute, completes without hanging, sequential cleanups work (4 tests)
+  - Test glob pattern matching: wildcards, excludes, multiple patterns, maxFiles, maxDepth, empty dirs (6 tests)
+  - Test FileWatcher: triggerFileChange tracking, debounce, include-pattern filtering, clearChangedFiles, autoRefresh=false, stop/cleanup, flushPendingChanges (7 tests)
+  - Test WebviewManager: handler registration, multiple handlers, isActive when no webview (3 tests)
+  - Test configuration change detection: registerConfigurationListener and handleConfigurationChange don't throw (2 tests)
+  - Test MemoryManager monitoring: snapshots, baseline tracking, start/stop monitoring, dispose (4 tests)
+  - **NOTE**: Issue 1.18 (findNodeInTree deduplication) is not tested here — add preservation tests before implementing 11.8
   - Run tests on UNFIXED code
-  - **EXPECTED OUTCOME**: Tests PASS (confirms baseline behavior)
+  - **ACTUAL OUTCOME**: 31/31 PASS in ~11s (baseline captured)
+  - Results documented in `src/__tests__/phase3-preservation-results.md`
   - _Requirements: 3.5, 3.8, 3.10_
 
 
@@ -261,100 +268,153 @@ These medium severity fixes address reliability, performance, security issues, a
 
 - [ ] 11. Fix Phase 3 issues - Medium severity fixes
 
-  - [ ] 11.1 Issue 1.8 - Implement or remove FileWatcher
-    - Analyze if file watching is a desired feature
-    - Option A (implement): Fix lines 127-140 in FileWatcher.ts to use `vscode.workspace.createFileSystemWatcher()`
-    - Option A: Add handlers for onDidChange, onDidCreate, onDidDelete events
-    - Option A: Store watchers in array for disposal
-    - Option B (remove): Delete src/analysis/FileWatcher.ts and remove from ExtensionController.ts
+  - [x] 11.1 Issue 1.8 - Implement FileWatcher setupWatchers()
+    - DECISION: Implement (not remove). FileWatcher is deeply integrated into ExtensionController — imported (line 31), instantiated (line 291), started/stopped in activate/deactivate, wired to handleFileChanges via initializeFileWatcher() (line 268). Removing it means ripping out 12+ lines across ExtensionController. The debounce, filtering, and lifecycle logic already work correctly — only setupWatchers() is empty.
+    - PREREQUISITE: Add `import * as vscode from 'vscode';` to FileWatcher.ts (currently has NO vscode import)
+    - Fix setupWatchers() at lines 127-140 in FileWatcher.ts (body is comment-only, no executable code)
+    - Use `vscode.workspace.createFileSystemWatcher()` to create watchers for each include pattern from `this.config.includePatterns`
+    - Add handlers for onDidChange, onDidCreate, onDidDelete events that call `this.handleFileChange(uri.fsPath)`
+    - Retype `private watchers: any[]` (line 30) to `private watchers: vscode.FileSystemWatcher[]`
+    - Store watchers in the array for disposal (stop() already iterates and disposes them)
     - _Bug_Condition: isBugCondition(input) where input.fileWatcherSetup AND isEmptyImplementation(input)_
-    - _Expected_Behavior: Actual file watching implemented or class removed_
-    - _Preservation: If removed, no file watching was working anyway; if implemented, new feature_
+    - _Expected_Behavior: Actual file watching via vscode.workspace.createFileSystemWatcher_
+    - _Preservation: Debounce, filtering, and lifecycle behavior must be preserved_
     - _Requirements: 2.8_
 
-  - [ ] 11.2 Issue 1.9 - Implement or remove state persistence
-    - Analyze if state persistence is needed
-    - Option A (implement): Fix lines 780-810 to use `this.context.globalState.get()` and `this.context.globalState.update()`
-    - Option A: Add ExtensionState interface with state properties
-    - Option A: Persist lastAnalysisTime, cachedDiagram, and other state
-    - Option B (remove): Delete loadState() and saveState() methods entirely
+  - [ ] 11.2 Issue 1.9 - Implement state persistence
+    - DECISION: Implement (not remove). saveState() is called from 5 places in ExtensionController (activate line 128, deactivate line 140/155, generateDiagram line 471, and after analysis line 623). loadState() is called on activate (line 128). Removing them means hunting down and deleting all call sites. The fix is a 2-line swap.
+    - Fix loadState() at lines 779-793 in ExtensionController.ts
+      - Replace `const savedState = undefined as Partial<ExtensionState> | undefined` with `const savedState = this.context.globalState.get<Partial<ExtensionState>>('archview.state')`
+    - Fix saveState() at lines 799-809 in ExtensionController.ts
+      - Replace `console.log('State saved')` with `await this.context.globalState.update('archview.state', this.state)`
+    - NOTE: ExtensionState interface ALREADY EXISTS at lines 50-61 — do NOT re-create it
+    - NOTE: ExtensionController already imports vscode (line 14) — no new import needed
     - _Bug_Condition: isBugCondition(input) where input.stateManagement AND isStubImplementation(input)_
-    - _Expected_Behavior: State actually persisted or methods removed_
-    - _Preservation: If removed, no state was persisting anyway; if implemented, new feature_
+    - _Expected_Behavior: State persisted via globalState API across sessions_
+    - _Preservation: All existing saveState/loadState call sites continue to work_
     - _Requirements: 2.9_
 
   - [ ] 11.3 Issue 1.10 - Fix workspace root detection
-    - In ExtensionController.ts: Change getWorkspaceRoot() at lines 667-671
+    - In ExtensionController.ts: Change getWorkspaceRoot() at lines 666-670
+    - Current signature: `private async getWorkspaceRoot(): Promise<string | null>`
     - Replace `return process.cwd()` with `return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd()`
+    - NOTE: With the fallback to process.cwd(), the method can never return null. Keep the return type as `Promise<string | null>` for now to avoid touching all call sites that have null checks — a return type narrowing can be done in a separate cleanup pass.
+    - NOTE: ExtensionController already imports vscode (line 14) — no new import needed
     - _Bug_Condition: isBugCondition(input) where input.workspaceRoot AND returnsWrongDirectory(input)_
-    - _Expected_Behavior: Returns actual workspace folder path_
-    - _Preservation: Workspace detection works correctly for normal cases_
+    - _Expected_Behavior: Returns actual workspace folder path, falls back to process.cwd()_
+    - _Preservation: Workspace detection returns a valid absolute path for normal cases_
     - _Requirements: 2.10_
 
   - [ ] 11.4 Issue 1.11 - Implement configuration reading
-    - NOTE: package.json already has complete configuration schema - do NOT add it again
-    - In ExtensionController.ts: Fix getAnalysisConfig() at lines 693-731
-    - Use `const config = vscode.workspace.getConfiguration('archview')`
-    - Read each config value with `config.get<type>('key', defaultValue)`
-    - Fix registerConfigurationListener() at lines 733-745 to use `vscode.workspace.onDidChangeConfiguration()`
-    - Add handleConfigurationChange() method to invalidate cache and offer refresh
+    - NOTE: package.json already has complete configuration schema — do NOT add it again
+    - NOTE: handleConfigurationChange() ALREADY EXISTS at lines 250-262 and works correctly (invalidates cache, reinitializes watcher) — do NOT re-create it
+    - In ExtensionController.ts: Fix getAnalysisConfig() at lines 692-730
+      - Replace the hardcoded object literal with calls to VS Code configuration API
+      - Use `const config = vscode.workspace.getConfiguration('archview')`
+      - Read each config value: `config.get<string[]>('includePatterns', ['**/*.ts', ...])` etc.
+      - Preserve the `this.mapLanguageStrings()` call for the languages field
+      - Keep the same defaults as fallback values in each `config.get()` call
+    - Fix registerConfigurationListener() at lines 236-244 (NOT 733-745)
+      - Replace the `console.log('Configuration listener registered')` no-op with:
+      - `vscode.workspace.onDidChangeConfiguration(e => { if (e.affectsConfiguration('archview')) { this.handleConfigurationChange(); } })`
+      - Store the disposable for cleanup
     - _Bug_Condition: isBugCondition(input) where input.configurationAccess AND usesHardcodedDefaults(input)_
-    - _Expected_Behavior: Configuration read from VS Code settings_
+    - _Expected_Behavior: Configuration read from VS Code settings with same defaults_
     - _Preservation: Default values remain the same, now user-configurable_
     - _Requirements: 2.11_
 
   - [ ] 11.5 Issue 1.12 - Remove artificial delay
-    - In MemoryManager.ts: Fix releaseMemory() at lines 183-195
-    - NOTE: Current code uses setInterval polling loop checking elapsed time every 100ms
-    - Remove the polling loop that waits full 2 seconds even after cleanup completes
-    - Return immediately after cleanup completes
+    - In MemoryManager.ts: Fix releaseMemory() at lines 175-195
+    - Current code: executes cleanup, calls forceGarbageCollection(), then creates a setInterval polling loop (line 186) that waits until `RELEASE_TIMEOUT_MS` (2000ms, defined at line 39) has elapsed
+    - Fix: Remove the `return new Promise(...)` wrapping the setInterval polling loop (lines 185-194)
+    - After cleanup and forceGarbageCollection(), return immediately (the method is already async)
+    - Remove the now-dead `RELEASE_TIMEOUT_MS` constant (line 39) — dead code should not be kept for documentation
+    - Keep the `forceGarbageCollection()` call — it's harmless and potentially useful
     - _Bug_Condition: isBugCondition(input) where input.memoryRelease AND hasArtificialDelay(input)_
-    - _Expected_Behavior: Returns immediately after cleanup_
-    - _Preservation: Cleanup functionality identical, just faster_
+    - _Expected_Behavior: Returns immediately after cleanup (< 100ms instead of ~2000ms)_
+    - _Preservation: Cleanup callback still executed, forceGC still called, just no artificial wait_
     - _Requirements: 2.12_
 
   - [ ] 11.6 Issue 1.13 - Fix message handler memory leak
-    - In WebviewManager.ts: Add `private messageHandlers: vscode.Disposable[] = []` property
-    - Fix onMessage() at lines 71-73 to store disposables in messageHandlers array
-    - Fix setupWebviewMessageHandling() at line 89 to dispose old handlers first
-    - Add dispose() method to clean up all handlers
+    - In WebviewManager.ts (already imports vscode at line 7):
+    - Current state: `messageHandlers` is a `Map<string, (message: WebviewMessage) => void>` (line 15) — this tracks user-registered handlers but NOT the vscode onDidReceiveMessage disposable
+    - The actual leak: `setupMessageHandling()` (lines 145-158, NOT "setupWebviewMessageHandling" or line 89) calls `this.panel.webview.onDidReceiveMessage()` which returns a disposable, but the disposable is never stored or disposed. Calling setupMessageHandling() multiple times leaks listeners.
+    - Fix setupMessageHandling() at lines 145-158:
+      - Add a `private messageListenerDisposable: vscode.Disposable | undefined` property
+      - Before creating a new listener, dispose the existing one: `this.messageListenerDisposable?.dispose()`
+      - Store the return value: `this.messageListenerDisposable = this.panel.webview.onDidReceiveMessage(...)`
+    - Fix onMessage() at lines 72-75:
+      - Currently returns void — change to return an unregister function: `return { dispose: () => this.messageHandlers.delete(handlerId) }`
+      - This lets callers clean up individual handlers and follows the VS Code Disposable pattern
+    - Add a public `dispose()` method following the VS Code Disposable pattern:
+      - Dispose `messageListenerDisposable`
+      - Clear the `messageHandlers` map
+      - Dispose the panel if active
     - _Bug_Condition: isBugCondition(input) where input.messageHandlers AND hasMemoryLeak(input)_
-    - _Expected_Behavior: Handlers properly disposed, no memory leak_
-    - _Preservation: Message handling functionality identical_
+    - _Expected_Behavior: Handlers properly disposed, no accumulated listeners_
+    - _Preservation: Message handling registration and delivery work identically_
     - _Requirements: 2.13_
 
-  - [ ] 11.7 Issue 1.14 - Fix glob pattern security
-    - In FileScanner.ts: Fix globToRegex() at lines 336-352
-    - Option A (recommended): Replace with `import * as minimatch from 'minimatch'` and use `minimatch.makeRe(pattern)`
-    - Option B: Properly escape special characters in custom implementation
+  - [ ] 11.7 Issue 1.14 - Replace custom glob with minimatch
+    - DECISION: Use minimatch library (not patch custom regex). Both FileScanner.ts and FileWatcher.ts have custom glob-to-regex implementations (6 references each). A single `npm install minimatch` replaces both with a battle-tested library, eliminating ReDoS risk and edge-case mismatches.
+    - PREREQUISITE: Run `npm install minimatch` and `npm install -D @types/minimatch` (minimatch is NOT currently a dependency)
+    - In FileScanner.ts:
+      - Add `import minimatch from 'minimatch';` at top of file
+      - Replace matchGlobPattern() body (lines 320-353) with `return minimatch(filePath, pattern, { dot: true })`
+    - In FileWatcher.ts:
+      - Add `import minimatch from 'minimatch';` at top of file (alongside the new vscode import from 11.1)
+      - Replace matchesPattern() + matchesSimplePattern() (lines 223-266) with a single method using `return minimatch(filePath, pattern, { dot: true })`
     - _Bug_Condition: isBugCondition(input) where input.globPattern AND hasRegexInjectionRisk(input)_
-    - _Expected_Behavior: Glob patterns safely converted to regex_
-    - _Preservation: Normal glob patterns work identically_
+    - _Expected_Behavior: Glob patterns safely matched via vetted minimatch library_
+    - _Preservation: Normal glob patterns produce identical match results_
     - _Requirements: 2.14_
 
-  - [ ] 11.8 Verify Phase 3 exploration tests now pass
+  - [ ] 11.8 Issue 1.18 - Deduplicate findNodeInTree()
+    - Both ComponentExtractor.ts (line 747) and RelationshipExtractor.ts (line 775) contain identical `private findNodeInTree()` implementations
+    - Create `src/utils/astUtils.ts` with a shared `findNodeInTree()` function:
+      - `export function findNodeInTree(root: Parser.SyntaxNode, target: any): Parser.SyntaxNode | null`
+      - Copy implementation from either file (they are identical)
+    - Update ComponentExtractor.ts:
+      - Remove the private findNodeInTree() method (line 747+)
+      - Add `import { findNodeInTree } from '../utils/astUtils'`
+      - Update all call sites (lines 122, 225, 357) from `this.findNodeInTree(...)` to `findNodeInTree(...)`
+    - Update RelationshipExtractor.ts:
+      - Remove the private findNodeInTree() method (line 775+)
+      - Add `import { findNodeInTree } from '../utils/astUtils'`
+      - Update all call sites (lines 104, 176, 196, 226, 279, 310, 364) from `this.findNodeInTree(...)` to `findNodeInTree(...)`
+    - NOTE: Only extract findNodeInTree. Do NOT extract graph functions (buildDirectoryTree, buildImportGraph, buildInheritanceGraph) — they only exist in AnalysisService.ts after GroundingDataBuilder.ts was deleted in Phase 1. Extracting single-use functions is premature abstraction.
+    - _Bug_Condition: isBugCondition(input) where input.codebaseFiles AND hasDuplicateImplementation(input)_
+    - _Expected_Behavior: Single findNodeInTree() in shared utils, imported by both extractors_
+    - _Preservation: findNodeInTree() behavior identical — same implementation, just shared_
+    - _Requirements: 2.18_
+
+  - [ ] 11.9 Verify Phase 3 exploration tests now pass
     - **Property 1: Expected Behavior** - Medium Severity Issues Fixed
-    - **IMPORTANT**: Re-run the SAME tests from task 9 - do NOT write new tests
+    - **IMPORTANT**: Re-run the SAME tests from task 9 — do NOT write new tests
+    - NOTE: Task 9 tests use comment-stripping before checking for code patterns, so fixes must be real executable code, not just rearranged comments
     - Run bug condition exploration tests from step 9
     - **EXPECTED OUTCOME**: Tests PASS (confirms bugs are fixed)
     - Verify file watching works or is removed
     - Verify state persistence works or is removed
     - Verify workspace root detection works
     - Verify configuration reading works
-    - Verify memory release is fast
+    - Verify memory release is fast (< 500ms)
     - Verify handlers don't leak
-    - Verify glob patterns are safe
+    - Verify glob patterns use vetted library
     - _Requirements: 2.8, 2.9, 2.10, 2.11, 2.12, 2.13, 2.14_
 
-  - [ ] 11.9 Verify Phase 3 preservation tests still pass
+  - [ ] 11.10 Verify Phase 3 preservation tests still pass
     - **Property 2: Preservation** - Core Functionality Unchanged
-    - **IMPORTANT**: Re-run the SAME tests from task 10 - do NOT write new tests
+    - **IMPORTANT**: Re-run the SAME tests from task 10 — do NOT write new tests
     - Run preservation property tests from step 10
-    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions)
-    - Confirm workspace detection still works
-    - Confirm configuration defaults still work
-    - Confirm memory cleanup still works
-    - Confirm glob patterns still work
+    - **EXPECTED OUTCOME**: All 31 tests PASS (confirms no regressions)
+    - Confirm workspace detection returns valid absolute path
+    - Confirm configuration returns valid defaults with correct shape
+    - Confirm memory cleanup executes callbacks correctly
+    - Confirm glob pattern matching works for normal patterns
+    - Confirm FileWatcher debounce, filtering, and lifecycle work
+    - Confirm WebviewManager handler registration works
+    - Confirm MemoryManager monitoring and stats work
 
 - [ ] 12. Phase 3 Checkpoint - Ensure all tests pass
   - Run full test suite for Phase 3 (`npm test`)

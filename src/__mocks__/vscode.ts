@@ -36,14 +36,37 @@ export const window = {
   showWarningMessage: jest.fn()
 };
 
+/**
+ * Helper: create a mock FileSystemWatcher that behaves like the real VS Code one.
+ * Each onDid* stores the callback so tests can simulate file events.
+ */
+function createMockFileSystemWatcher() {
+  const watcher = {
+    onDidChange: jest.fn(() => ({ dispose: jest.fn() })),
+    onDidCreate: jest.fn(() => ({ dispose: jest.fn() })),
+    onDidDelete: jest.fn(() => ({ dispose: jest.fn() })),
+    dispose: jest.fn(),
+  };
+  return watcher;
+}
+
 export const workspace = {
   workspaceFolders: undefined as any,
   getConfiguration: jest.fn(() => ({
     get: jest.fn((key: string, defaultValue?: any) => defaultValue)
   })),
-  onDidChangeConfiguration: jest.fn(),
-  createFileSystemWatcher: jest.fn()
+  onDidChangeConfiguration: jest.fn(() => ({ dispose: jest.fn() })),
+  createFileSystemWatcher: jest.fn(() => createMockFileSystemWatcher()),
 };
+
+export class RelativePattern {
+  base: string;
+  pattern: string;
+  constructor(base: string, pattern: string) {
+    this.base = base;
+    this.pattern = pattern;
+  }
+}
 
 export const Uri = {
   file: jest.fn((path: string) => ({ fsPath: path })),
