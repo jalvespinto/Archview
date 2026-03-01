@@ -195,42 +195,6 @@ export interface ValidationResult {
 }
 
 // ============================================================================
-// Error Models
-// ============================================================================
-
-export class AnalysisError extends Error {
-  constructor(
-    message: string,
-    public readonly userMessage: string,
-    public readonly context?: Record<string, unknown>
-  ) {
-    super(message);
-    this.name = 'AnalysisError';
-  }
-}
-
-export class RenderError extends Error {
-  constructor(
-    message: string,
-    public readonly userMessage: string,
-    public readonly context?: Record<string, unknown>
-  ) {
-    super(message);
-    this.name = 'RenderError';
-  }
-}
-
-export class AIError extends Error {
-  constructor(
-    message: string,
-    public readonly context?: Record<string, unknown>
-  ) {
-    super(message);
-    this.name = 'AIError';
-  }
-}
-
-// ============================================================================
 // Validation Utilities
 // ============================================================================
 

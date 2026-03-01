@@ -12,6 +12,8 @@
         "timeout *",
         "which *",
         "kiro *",
-        "pwd *"
+        "pwd *",
+        "ps *",
+        "pkill *"
     ]
 }
