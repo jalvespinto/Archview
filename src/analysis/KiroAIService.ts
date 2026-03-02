@@ -99,11 +99,9 @@ export class KiroAIService {
     // Check cache first
     const cached = await this.cache.get(grounding, tier);
     if (cached) {
-      console.log(`Cache hit for tier ${tier}`);
       return cached;
     }
 
-    console.log(`Cache miss for tier ${tier}, querying LLM`);
     const startTime = Date.now();
 
     try {
@@ -132,10 +130,6 @@ export class KiroAIService {
         const ambiguousFiles = this.extractAmbiguousFiles(llmResponse, grounding);
         
         if (ambiguousFiles.length > 0) {
-          console.log(
-            `Low confidence at tier ${tier}. Enriching ${ambiguousFiles.length} ambiguous files to tier ${tier + 1}`
-          );
-          
           const enriched = await this.enrichGrounding(
             grounding,
             ambiguousFiles,

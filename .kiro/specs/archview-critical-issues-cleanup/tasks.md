@@ -465,7 +465,7 @@ These code quality fixes clean up debug statements, improve type safety, and enh
 
 - [ ] 15. Fix Phase 4 issues - Code quality fixes
 
-  - [ ] 15.1 Issue 1.15 - Remove debug statements from all production files
+  - [x] 15.1 Issue 1.15 - Remove debug statements from all production files
     - Remove ALL console.log debug statements across all 9 affected production files (83+ total):
     - **ExtensionController.ts (35 statements)**: Remove all `console.log('===...')` debug markers (lines 188, 194, 203, 213, 222, 406, 488), progress/status logs (lines 152, 180, 234, 235, 258, 275, 315, 348, 394, 409, 411, 423, 427, 430, 432, 443, 446, 453, 459, 462, 475, 478, 539, 569, 619, 756), and the fake OutputChannel at lines 118-119. Fix test command at lines 186-192: delete test command registration entirely (Option B).
     - **webview.js (20 statements)**: Remove all console.log calls — these are debug logs for rendering, zoom, selection, messaging, export, etc. (lines 22, 64, 67, 70, 73, 76, 79, 82, 85, 89, 93, 96, 106, 134, 169, 199, 208, 216, 287, 311)

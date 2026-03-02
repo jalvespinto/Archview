@@ -482,7 +482,6 @@ export async function runKiroAIPOC(context?: any): Promise<POCReport> {
   };
   
   // Test 1: API Availability
-  console.log('Testing Kiro AI API availability...');
   const availabilityResult = await testKiroAIAvailability();
   report.tests.push({
     name: 'API Availability',
@@ -516,7 +515,6 @@ export async function runKiroAIPOC(context?: any): Promise<POCReport> {
   }
   
   // Test 2: API Signature
-  console.log('Testing Kiro AI API signature...');
   const signatureResult = await testKiroAISignature(kiroAI);
   report.tests.push({
     name: 'API Signature',
@@ -525,7 +523,6 @@ export async function runKiroAIPOC(context?: any): Promise<POCReport> {
   });
   
   // Test 3: Minimal Grounding Test
-  console.log('Testing Kiro AI with minimal grounding data...');
   const groundingResult = await testKiroAIWithMinimalGrounding(kiroAI);
   report.tests.push({
     name: 'Minimal Grounding Test',
@@ -534,7 +531,6 @@ export async function runKiroAIPOC(context?: any): Promise<POCReport> {
   });
   
   // Test 4: Constraints
-  console.log('Testing Kiro AI constraints...');
   const constraintsResult = await testKiroAIConstraints(kiroAI);
   report.tests.push({
     name: 'API Constraints',
@@ -543,7 +539,6 @@ export async function runKiroAIPOC(context?: any): Promise<POCReport> {
   });
   
   // Test 5: Fallback Behavior
-  console.log('Testing fallback behavior...');
   const fallbackResult = await testFallbackBehavior(null);
   report.tests.push({
     name: 'Fallback Behavior',

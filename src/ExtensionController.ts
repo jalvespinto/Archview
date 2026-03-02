@@ -115,16 +115,14 @@ export class ExtensionController {
     // Initialize error handler
     // TODO: Use actual Kiro output channel and window API
     const outputChannel = {
-      appendLine: (value: string) => console.log(value),
-      show: () => console.log('Showing output channel')
+      appendLine: (value: string) => {},
+      show: () => {}
     };
     const notifier = {
       showErrorMessage: async (message: string, ...items: string[]) => {
-        console.error(message);
         return undefined;
       },
       showWarningMessage: async (message: string, ...items: string[]) => {
-        console.warn(message);
         return undefined;
       }
     };
@@ -148,8 +146,6 @@ export class ExtensionController {
 
     // Initialize file watcher if auto-refresh is enabled (Requirements: 11.2, 11.3)
     await this.initializeFileWatcher();
-
-    console.log('ArchView extension activated');
   }
 
   /**
@@ -176,8 +172,6 @@ export class ExtensionController {
       this.state.architecturalModel = null;
       this.state.analysisResult = null;
     });
-
-    console.log('ArchView extension deactivated');
   }
 
   /**
@@ -185,23 +179,10 @@ export class ExtensionController {
    * Requirements: 8.1
    */
   private registerCommands(): void {
-    console.log('=== registerCommands called ===');
-    
-    // Test command to verify registration works
-    const testDisposable = vscode.commands.registerCommand(
-      'archview.test',
-      () => {
-        console.log('=== TEST COMMAND WORKS ===');
-        vscode.window.showInformationMessage('ArchView test command works!');
-      }
-    );
-    
     // Register generateDiagram
     const generateDisposable = vscode.commands.registerCommand(
       'archview.generateDiagram',
       async () => {
-        console.log('=== archview.generateDiagram command triggered ===');
-        vscode.window.showInformationMessage('Generate Diagram command triggered!');
         await this.generateDiagram();
       }
     );
@@ -210,7 +191,6 @@ export class ExtensionController {
     const refreshDisposable = vscode.commands.registerCommand(
       'archview.refreshDiagram',
       async () => {
-        console.log('=== archview.refreshDiagram command triggered ===');
         await this.refreshDiagram();
       }
     );
@@ -219,20 +199,15 @@ export class ExtensionController {
     const exportDisposable = vscode.commands.registerCommand(
       'archview.exportDiagram',
       async (format: 'png' | 'svg') => {
-        console.log('=== archview.exportDiagram command triggered ===');
         await this.exportDiagram(format);
       }
     );
 
     if (this.context) {
-      this.context.subscriptions.push(testDisposable);
       this.context.subscriptions.push(generateDisposable);
       this.context.subscriptions.push(refreshDisposable);
       this.context.subscriptions.push(exportDisposable);
     }
-    
-    console.log('Commands registered successfully');
-    console.log('Try running: archview.test');
   }
 
   /**
@@ -251,11 +226,6 @@ export class ExtensionController {
         }
       })
     );
-    //   if (e.affectsConfiguration('archview')) {
-    //     this.handleConfigurationChange();
-    //   }
-    // });
-    console.log('Configuration listener registered');
   }
 
   /**
@@ -272,7 +242,6 @@ export class ExtensionController {
     // If diagram is currently displayed, offer to refresh
     if (this.webviewManager.isActive()) {
       // TODO: Show notification to user
-      console.log('Configuration changed - cache invalidated');
     }
   }
 
@@ -312,8 +281,6 @@ export class ExtensionController {
    * Requirements: 11.3, 11.4, 11.5
    */
   private async handleFileChanges(event: FileChangeEvent): Promise<void> {
-    console.log(`Files changed: ${event.changedFiles.size} files`);
-
     // Mark diagram as out of sync (Requirement 11.5)
     this.state.isDiagramOutOfSync = true;
 
@@ -345,8 +312,6 @@ export class ExtensionController {
    */
   private async performIncrementalRefresh(changedFiles: Set<string>): Promise<void> {
     try {
-      console.log(`Performing incremental refresh for ${changedFiles.size} files`);
-
       // Preserve current state (Requirement 11.4)
       const previousState = {
         selectedElementId: this.state.selectedElementId,
@@ -390,11 +355,11 @@ export class ExtensionController {
           type: 'diagramRefreshed'
         } as any);
       }
-
-      console.log('Incremental refresh completed successfully');
     } catch (error) {
-      console.error('Incremental refresh failed:', error);
       // Keep diagram marked as out of sync on error
+      vscode.window.showErrorMessage(
+        `Incremental refresh failed: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
@@ -403,15 +368,11 @@ export class ExtensionController {
    * Requirements: 2.1, 3.1, 6.5, 11.1
    */
   async generateDiagram(): Promise<void> {
-    console.log('=== generateDiagram called ===');
     try {
       // Get workspace root path
-      console.log('Getting workspace root...');
       const rootPath = await this.getWorkspaceRoot();
-      console.log('Workspace root:', rootPath);
       
       if (!rootPath) {
-        console.error('No workspace root found');
         throw new AnalysisError(
           'No workspace folder open',
           'Please open a folder or workspace to analyze',
@@ -419,17 +380,12 @@ export class ExtensionController {
         );
       }
 
-      // Show progress indicator
-      console.log('Generating architecture diagram...');
-
       // Get analysis configuration
       const config = this.getAnalysisConfig(rootPath);
-      console.log('Analysis config:', config);
 
       // Phase 1: Build grounding layer (Requirements: 2.1)
-      console.log('Phase 1: Building grounding layer...');
       const progressCallback: ProgressCallback = (percentage, message) => {
-        console.log(`Progress: ${percentage}% - ${message}`);
+        // Progress tracking
       };
 
       const cancellationToken = createCancellationToken();
@@ -440,26 +396,21 @@ export class ExtensionController {
         cancellationToken,
         timeoutMs: 120000
       });
-      console.log('Grounding layer built, files:', this.state.groundingData?.files.length);
 
       // Phase 2: Interpret with AI (Requirements: 2.1, 2.2)
-      console.log('Phase 2: Interpreting with AI...');
       if (config.aiEnabled) {
         this.state.architecturalModel = await this.aiService.interpretArchitecture(
           this.state.groundingData
         );
       } else {
         // Use fallback heuristic interpretation
-        console.log('Using fallback heuristic model...');
         this.state.architecturalModel = await this.aiService.buildHeuristicModel(
           this.state.groundingData,
           0 // inferenceTimeMs for fallback
         );
       }
-      console.log('Architectural model created, components:', this.state.architecturalModel?.components.length);
 
       // Phase 3: Generate diagram (Requirements: 2.1)
-      console.log('Phase 3: Generating diagram...');
       if (!this.state.architecturalModel) {
         throw new AnalysisError(
           'Failed to generate architectural model',
@@ -472,10 +423,8 @@ export class ExtensionController {
         this.state.architecturalModel,
         this.state.abstractionLevel
       );
-      console.log('Diagram data generated, nodes:', diagramData.nodes.length);
 
       // Phase 4: Display in webview (Requirements: 2.1)
-      console.log('Phase 4: Creating webview...');
       this.webviewManager.createWebview();
       this.webviewManager.updateDiagram(diagramData);
 
@@ -484,14 +433,10 @@ export class ExtensionController {
 
       // Save state
       await this.saveState();
-
-      console.log('=== Diagram generated successfully ===');
     } catch (error) {
-      console.error('=== Error in generateDiagram ===', error);
       if (this.errorHandler && error instanceof AnalysisError) {
         this.errorHandler.handleAnalysisError(error);
       } else {
-        console.error('Failed to generate diagram:', error);
         // Show error to user
         vscode.window.showErrorMessage(`Failed to generate diagram: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -535,13 +480,13 @@ export class ExtensionController {
           this.clearSelection();
         }
       }
-
-      console.log('Diagram refreshed successfully');
     } catch (error) {
       if (this.errorHandler && error instanceof AnalysisError) {
         this.errorHandler.handleAnalysisError(error);
       } else {
-        console.error('Failed to refresh diagram:', error);
+        vscode.window.showErrorMessage(
+          `Failed to refresh diagram: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
     }
   }
@@ -565,13 +510,13 @@ export class ExtensionController {
         type: 'exportRequested',
         format
       });
-
-      console.log(`Export requested: ${format}`);
     } catch (error) {
       if (this.errorHandler && error instanceof RenderError) {
         this.errorHandler.handleRenderError(error);
       } else {
-        console.error('Failed to export diagram:', error);
+        vscode.window.showErrorMessage(
+          `Failed to export diagram: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
     }
   }
@@ -616,7 +561,6 @@ export class ExtensionController {
    */
   private handleElementHovered(elementId: string): void {
     // TODO: Show tooltip with element information
-    console.log(`Element hovered: ${elementId}`);
   }
 
   /**
@@ -753,24 +697,7 @@ export class ExtensionController {
    */
   private async showWelcomeMessage(): Promise<void> {
     // TODO: Use actual Kiro notification API
-    console.log(`
-╔════════════════════════════════════════════════════════════╗
-║  Welcome to ArchView - AI Architecture Diagrams           ║
-╠════════════════════════════════════════════════════════════╣
-║                                                            ║
-║  Get started:                                              ║
-║  1. Open a project folder                                  ║
-║  2. Run command: "ArchView: Generate Diagram"              ║
-║  3. Explore your architecture visually!                    ║
-║                                                            ║
-║  Features:                                                 ║
-║  • AI-powered architecture analysis                        ║
-║  • Interactive diagram navigation                          ║
-║  • Multi-language support                                  ║
-║  • Export to PNG/SVG                                       ║
-║                                                            ║
-╚════════════════════════════════════════════════════════════╝
-    `);
+    // Welcome message would be shown here
   }
 
   /**
@@ -787,7 +714,8 @@ export class ExtensionController {
         this.state = { ...this.state, ...savedState };
       }
     } catch (error) {
-      console.error('Failed to load state:', error);
+      // State loading is non-critical - continue with default state
+      // Error is silently handled to avoid disrupting extension activation
     }
   }
 
@@ -801,7 +729,8 @@ export class ExtensionController {
     try {
       await this.context.globalState.update('archview.state', this.state);
     } catch (error) {
-      console.error('Failed to save state:', error);
+      // State saving is non-critical - continue without persisting
+      // Error is silently handled to avoid disrupting normal operation
     }
   }
 }

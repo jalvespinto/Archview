@@ -68,8 +68,6 @@ export class WebviewMessageHandler {
    * Handle incoming messages from webview
    */
   private handleMessage(message: WebviewMessage): void {
-    console.log('Handling message:', message);
-
     switch (message.type) {
       case 'initialize':
         this.handleInitialize(message.data);
@@ -102,7 +100,6 @@ export class WebviewMessageHandler {
    * Requirements: 3.1
    */
   private handleInitialize(data: DiagramData): void {
-    console.log('Initialize message received with data:', data);
     this.setDiagramData(data);
     // Initialization is handled by the webview itself
     // This handler is for any extension-side initialization needed
@@ -113,8 +110,6 @@ export class WebviewMessageHandler {
    * Requirements: 3.1, 3.2, 3.3, 4.1, 4.4
    */
   private handleElementSelected(elementId: string): void {
-    console.log('Element selected:', elementId);
-
     if (!elementId) {
       // Clear selection
       this.fileHighlighter.clearHighlights();
@@ -130,9 +125,7 @@ export class WebviewMessageHandler {
     if (files.length > 0) {
       // Highlight associated files
       this.fileHighlighter.highlightFiles(files);
-      console.log('Highlighted files:', files);
     } else {
-      console.warn('No files found for element:', elementId);
       this.fileHighlighter.clearHighlights();
     }
 
@@ -147,8 +140,6 @@ export class WebviewMessageHandler {
    * Requirements: 3.4
    */
   private handleElementHovered(elementId: string): void {
-    console.log('Element hovered:', elementId);
-
     // Tooltip display is handled by the webview DiagramRenderer
     // This handler is for any extension-side hover effects needed
 
@@ -163,8 +154,6 @@ export class WebviewMessageHandler {
    * Requirements: 6.5
    */
   private handleAbstractionLevelChanged(level: AbstractionLevel): void {
-    console.log('Abstraction level changed:', level);
-
     // Update diagram with new abstraction level
     if (this.currentDiagramData) {
       const filteredData = this.filterDiagramByAbstractionLevel(
@@ -185,13 +174,9 @@ export class WebviewMessageHandler {
    * Requirements: 7.1
    */
   private handleExportRequested(format: 'png' | 'svg'): void {
-    console.log('Export requested:', format);
-
     // Notify callback to handle actual export
     if (this.callbacks.onExportRequested) {
       this.callbacks.onExportRequested(format);
-    } else {
-      console.warn('No export handler registered');
     }
   }
 
@@ -200,13 +185,9 @@ export class WebviewMessageHandler {
    * Requirements: 11.1, 11.4
    */
   private handleRefreshRequested(): void {
-    console.log('Refresh requested');
-
     // Notify callback to regenerate diagram
     if (this.callbacks.onRefreshRequested) {
       this.callbacks.onRefreshRequested();
-    } else {
-      console.warn('No refresh handler registered');
     }
   }
 
@@ -214,7 +195,6 @@ export class WebviewMessageHandler {
    * Handle error message from webview
    */
   private handleError(message: string): void {
-    console.error('Webview error:', message);
     // Could show error notification to user
   }
 
@@ -223,13 +203,9 @@ export class WebviewMessageHandler {
    * Requirements: 4.3
    */
   handleFileClick(filePath: string): void {
-    console.log('File clicked:', filePath);
-
     // Notify callback to open file in editor
     if (this.callbacks.onFileClicked) {
       this.callbacks.onFileClicked(filePath);
-    } else {
-      console.warn('No file click handler registered');
     }
   }
 

@@ -419,13 +419,13 @@ export class WebviewManager {
 
         function initialize() {
           document.getElementById('zoom-in').addEventListener('click', () => {
-            console.log('Zoom in');
+            // Zoom in
           });
           document.getElementById('zoom-out').addEventListener('click', () => {
-            console.log('Zoom out');
+            // Zoom out
           });
           document.getElementById('fit-view').addEventListener('click', () => {
-            console.log('Fit view');
+            // Fit view
           });
           document.getElementById('abstraction-level').addEventListener('change', (e) => {
             vscode.postMessage({ type: 'abstractionLevelChanged', level: parseInt(e.target.value) });
@@ -445,7 +445,6 @@ export class WebviewManager {
             if (message.type === 'initialize') {
               currentDiagramData = message.data;
               document.getElementById('loading').style.display = 'none';
-              console.log('Diagram initialized:', message.data);
             } else if (message.type === 'error') {
               document.getElementById('loading').style.display = 'none';
               document.getElementById('error').style.display = 'block';

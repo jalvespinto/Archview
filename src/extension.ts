@@ -13,12 +13,8 @@ let controller: ExtensionController | null = null;
  * Requirements: 8.1, 8.6
  */
 export async function activate(context: any): Promise<void> {
-  console.log('ArchView extension activating...');
-  
   controller = new ExtensionController();
   await controller.activate(context);
-  
-  console.log('ArchView extension activated successfully');
 }
 
 /**
@@ -26,12 +22,8 @@ export async function activate(context: any): Promise<void> {
  * Requirements: 8.1
  */
 export async function deactivate(): Promise<void> {
-  console.log('ArchView extension deactivating...');
-  
   if (controller) {
     await controller.deactivate();
     controller = null;
   }
-  
-  console.log('ArchView extension deactivated successfully');
 }

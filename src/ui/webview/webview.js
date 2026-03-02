@@ -19,8 +19,6 @@
    * Initialize the webview
    */
   function initialize() {
-    console.log('Initializing webview...');
-
     // Get DOM elements
     const container = document.getElementById('diagram-container');
     const zoomInBtn = document.getElementById('zoom-in');
@@ -61,39 +59,37 @@
     // In production, this would use the actual DiagramRenderer class
     return {
       initialize: function(container) {
-        console.log('DiagramRenderer initialized');
+        // DiagramRenderer initialized
       },
       renderDiagram: function(data) {
-        console.log('Rendering diagram:', data);
+        // Rendering diagram
       },
       zoomIn: function() {
-        console.log('Zoom in');
+        // Zoom in
       },
       zoomOut: function() {
-        console.log('Zoom out');
+        // Zoom out
       },
       fitToView: function() {
-        console.log('Fit to view');
+        // Fit to view
       },
       selectElement: function(elementId) {
-        console.log('Select element:', elementId);
+        // Select element
       },
       clearSelection: function() {
-        console.log('Clear selection');
+        // Clear selection
       },
       exportToPNG: function() {
-        console.log('Export to PNG');
         return new Blob(['fake png'], { type: 'image/png' });
       },
       exportToSVG: function() {
-        console.log('Export to SVG');
         return '<svg></svg>';
       },
       onElementClick: function(handler) {
-        console.log('Element click handler registered');
+        // Element click handler registered
       },
       onElementHover: function(handler) {
-        console.log('Element hover handler registered');
+        // Element hover handler registered
       }
     };
   }
@@ -103,7 +99,6 @@
    */
   function handleMessage(event) {
     const message = event.data;
-    console.log('Received message:', message);
 
     switch (message.type) {
       case 'initialize':
@@ -122,7 +117,7 @@
         handleErrorMessage(message.message);
         break;
       default:
-        console.warn('Unknown message type:', message.type);
+        // Unknown message type
     }
   }
 
@@ -131,7 +126,6 @@
    * Requirements: 3.1
    */
   function handleInitializeMessage(data) {
-    console.log('Initializing diagram with data:', data);
     currentDiagramData = data;
 
     hideLoading();
@@ -166,7 +160,6 @@
    * Requirements: 6.5
    */
   function handleAbstractionLevelChangedMessage(level) {
-    console.log('Abstraction level changed:', level);
     currentAbstractionLevel = level;
 
     // Update select dropdown
@@ -186,7 +179,6 @@
    * Handle error message
    */
   function handleErrorMessage(message) {
-    console.error('Error:', message);
     hideLoading();
     showError(message);
   }
@@ -196,7 +188,6 @@
    * Requirements: 11.5
    */
   function handleDiagramOutOfSync(timestamp) {
-    console.log('Diagram is out of sync:', timestamp);
     showSyncIndicator();
   }
 
@@ -205,7 +196,6 @@
    * Requirements: 11.5
    */
   function handleDiagramRefreshed() {
-    console.log('Diagram refreshed');
     hideSyncIndicator();
   }
 
@@ -213,7 +203,6 @@
    * Send message to extension
    */
   function sendMessage(message) {
-    console.log('Sending message:', message);
     vscode.postMessage(message);
   }
 
@@ -284,9 +273,7 @@
       });
 
       // Note: Actual file saving will be handled by extension
-      console.log('PNG export requested');
     } catch (error) {
-      console.error('Error exporting PNG:', error);
       showError('Failed to export PNG: ' + error.message);
     }
   }
@@ -308,9 +295,7 @@
       });
 
       // Note: Actual file saving will be handled by extension
-      console.log('SVG export requested');
     } catch (error) {
-      console.error('Error exporting SVG:', error);
       showError('Failed to export SVG: ' + error.message);
     }
   }

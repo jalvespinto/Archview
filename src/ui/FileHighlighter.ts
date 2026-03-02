@@ -113,13 +113,6 @@ export class FileHighlighter {
       // Clear decorations for non-highlighted files
       // This would require tracking previously highlighted files
       // For now, we rely on clearHighlights() being called first
-    } else {
-      // Fallback: Log the highlighted files
-      if (this.highlightedFiles.size > 0) {
-        console.log('Highlighting files:', Array.from(this.highlightedFiles));
-      } else {
-        console.log('Clearing all file highlights');
-      }
     }
   }
 

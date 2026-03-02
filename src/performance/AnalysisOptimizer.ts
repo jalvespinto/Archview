@@ -126,7 +126,6 @@ export class AnalysisOptimizer {
 
     // Check if content unchanged
     if (cached && cached.contentHash === contentHash) {
-      console.log(`Using incremental cache for ${filePath}`);
       return cached.ast as T;
     }
 
