@@ -416,7 +416,7 @@ These medium severity fixes address reliability, performance, security issues, a
     - Confirm WebviewManager handler registration works
     - Confirm MemoryManager monitoring and stats work
 
-- [ ] 12. Phase 3 Checkpoint - Ensure all tests pass
+- [x] 12. Phase 3 Checkpoint - Ensure all tests pass
   - Run full test suite for Phase 3 (`npm test`)
   - Verify no regressions in core functionality
   - Ask user if questions arise before proceeding to Phase 4
@@ -433,13 +433,15 @@ These code quality fixes clean up debug statements, improve type safety, and enh
   - **CRITICAL**: These tests MUST FAIL on unfixed code - failures confirm the bugs exist
   - **DO NOT attempt to fix the tests or the code when they fail**
   - **GOAL**: Surface counterexamples that demonstrate the bugs exist
-  - Test Issue 1.15: Search codebase for console.log statements - assert no debug logs (will fail, 10+ found)
-  - Test Issue 1.16: List files in repository root - assert no troubleshooting markdown files (will fail, 13 found)
-  - Test Issue 1.17: Run TypeScript compiler with strict mode - assert no any types (will fail, multiple found)
-  - Test Issue 1.20: Generate webview HTML, check CSP header - assert uses nonce-based CSP (will fail, uses unsafe-inline)
+  - **METHODOLOGY**: Reuse Phase 3's `stripComments()` helper for Issues 1.15 and 1.17 to avoid false positives from commented-out code. Use `fs.readFileSync()` to read source files and `fs.readdirSync()` for file listing. For Issue 1.20, read WebviewManager.ts source and extract the CSP meta tag string.
+  - **OUTPUT**: Create `src/__tests__/phase4-bug-exploration.test.ts` and document results in `src/__tests__/phase4-bug-exploration-results.md`
+  - Test Issue 1.15: Read all production .ts/.js files under src/ (excluding __tests__), strip comments, search for `console.log` statements — assert zero found. Files affected: ExtensionController.ts (35), webview.js (20), WebviewMessageHandler.ts (9), spike/kiro-ai-poc.ts (5), extension.ts (4), WebviewManager.ts (4), KiroAIService.ts (3), FileHighlighter.ts (2), AnalysisOptimizer.ts (1). Will fail — 83+ console.log statements across 9 production files. NOTE: task 15.1 currently only targets ExtensionController.ts; scope of 15.1 should be expanded to cover all 9 files or this test should be scoped to match 15.1's final scope.
+  - Test Issue 1.16: Read repository root directory, filter out legitimate docs (README.md, CHANGELOG.md, CONTRIBUTING.md), assert no other .md or debug .txt files remain. Will fail — 12 troubleshooting artifacts found: COMMANDS_FIXED.md, DEBUG_LOGGING_ADDED.md, FIX_APPLIED.md, HOW_TO_TEST.md, QUICK_FIX.md, TEST_COMMAND_REGISTRATION.md, TESTING_GUIDE.md, TEST_ON_THIS_REPO.md, TROUBLESHOOTING_COMMAND_NOT_FOUND.md, WEBVIEW_FIX_SUMMARY.md, WEBVIEW_ISSUE_REPORT.md (11 .md files) + test-output.txt (1 .txt file).
+  - Test Issue 1.17: Read target production files, strip comments, grep for explicit `any` type patterns (`: any`, `as any`, `any[]`, `<any>`, `(...args: any`). Do NOT run tsc — strict mode is already enabled and does not flag explicit `any` annotations. Target files and counts: WebviewManager.ts (3: panel property line 14, return types lines 23/142), FileHighlighter.ts (2: decorationProvider line 19, kiroAPI line 20), ExtensionController.ts (5: Memento interface line 38, subscriptions line 42, Command callback line 49, type assertions lines 325/391). Will fail — 10 explicit `any` annotations across 3 critical files. NOTE: FileWatcher.ts (mentioned in 15.3) has no `any` types — verify before implementing fix.
+  - Test Issue 1.20: Read WebviewManager.ts source, extract the CSP meta tag at line 207 from getWebviewContent() (lines 199-251), assert it uses nonce-based `script-src 'nonce-...'` and `style-src 'nonce-...'` directives. Also verify `<style>` tag (line 209) and `<script>` tag (line 246) have `nonce=` attributes. Will fail — current CSP is `default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'` with no nonce generation anywhere in the file.
   - Run tests on UNFIXED code
-  - **EXPECTED OUTCOME**: Tests FAIL (this is correct - it proves the bugs exist)
-  - Document counterexamples found
+  - **EXPECTED OUTCOME**: Tests FAIL (this is correct — it proves the bugs exist)
+  - Document counterexamples found in `src/__tests__/phase4-bug-exploration-results.md`
   - _Requirements: 2.15, 2.16, 2.17, 2.20_
 
 - [ ] 14. Write preservation property tests for Phase 4 (BEFORE implementing fixes)
@@ -459,57 +461,63 @@ These code quality fixes clean up debug statements, improve type safety, and enh
 
 - [ ] 15. Fix Phase 4 issues - Code quality fixes
 
-  - [ ] 15.1 Issue 1.15 - Remove debug statements
-    - In ExtensionController.ts: Remove all console.log debug statements
-    - Delete console.log at line 181: `console.log('=== registerCommands called ===')`
-    - Delete console.log at line 188: `console.log('=== TEST COMMAND WORKS ===')`
-    - Delete console.log at line 197: `console.log('=== archview.generateDiagram command triggered ===')`
-    - Delete console.log at line 207: `console.log('=== archview.refreshDiagram command triggered ===')`
-    - Delete console.log at line 216: `console.log('=== archview.exportDiagram command triggered ===')`
-    - Delete console.log at line 391: `console.log('=== generateDiagram called ===')`
-    - Delete console.log at line 473: `console.log('=== Diagram generated successfully ===')`
-    - Delete console.log at line 229: `console.log('Commands registered successfully')`
-    - Delete console.log at line 229: `console.log('Try running: archview.test')`
-    - Remove all other debug console.log statements throughout the file
-    - Fix test command at lines 186-192: Either implement actual test execution or remove command
-    - Option A: Run test suite via terminal
-    - Option B: Delete test command registration entirely
+  - [ ] 15.1 Issue 1.15 - Remove debug statements from all production files
+    - Remove ALL console.log debug statements across all 9 affected production files (83+ total):
+    - **ExtensionController.ts (35 statements)**: Remove all `console.log('===...')` debug markers (lines 188, 194, 203, 213, 222, 406, 488), progress/status logs (lines 152, 180, 234, 235, 258, 275, 315, 348, 394, 409, 411, 423, 427, 430, 432, 443, 446, 453, 459, 462, 475, 478, 539, 569, 619, 756), and the fake OutputChannel at lines 118-119. Fix test command at lines 186-192: delete test command registration entirely (Option B).
+    - **webview.js (20 statements)**: Remove all console.log calls — these are debug logs for rendering, zoom, selection, messaging, export, etc. (lines 22, 64, 67, 70, 73, 76, 79, 82, 85, 89, 93, 96, 106, 134, 169, 199, 208, 216, 287, 311)
+    - **WebviewMessageHandler.ts (9 statements)**: Remove message handling debug logs (lines 71, 105, 116, 133, 150, 166, 188, 203, 226)
+    - **spike/kiro-ai-poc.ts (5 statements)**: Remove test logging (lines 485, 519, 528, 537, 546). Consider if entire spike/ can be excluded or deleted.
+    - **extension.ts (4 statements)**: Remove activation/deactivation logs (lines 16, 21, 29, 36)
+    - **WebviewManager.ts (4 statements)**: Remove zoom/init debug logs (lines 422, 425, 428, 448)
+    - **KiroAIService.ts (3 statements)**: Remove cache hit/miss logs (lines 102, 106, 135)
+    - **FileHighlighter.ts (2 statements)**: Remove highlight debug logs (lines 119, 121)
+    - **AnalysisOptimizer.ts (1 statement)**: Remove incremental cache log (line 129)
+    - NOTE: Where logging is operationally useful (e.g., activation, errors), consider replacing with VS Code OutputChannel logging instead of silent removal
     - _Bug_Condition: isBugCondition(input) where input.codeExecution AND hasDebugStatements(input)_
-    - _Expected_Behavior: No debug statements in production code_
+    - _Expected_Behavior: No console.log debug statements in any production code_
     - _Preservation: Core functionality unchanged, just cleaner output_
     - _Requirements: 2.15_
 
   - [ ] 15.2 Issue 1.16 - Remove troubleshooting files
     - Review each troubleshooting file to verify it's not actual documentation
-    - Delete COMMANDS_FIXED.md from repository root
-    - Delete DEBUG_LOGGING_ADDED.md from repository root
-    - Delete FIX_APPLIED.md from repository root
-    - Delete QUICK_FIX.md from repository root
-    - Delete TROUBLESHOOTING_COMMAND_NOT_FOUND.md from repository root
-    - Delete WEBVIEW_ISSUE_REPORT.md from repository root
-    - Delete WEBVIEW_FIX_SUMMARY.md from repository root
-    - Delete TEST_COMMAND_REGISTRATION.md from repository root
-    - Delete TEST_ON_THIS_REPO.md from repository root
-    - Delete test-output.txt from repository root
-    - Delete any other troubleshooting markdown files (verify 13 total)
-    - Keep proper documentation: README.md, CHANGELOG.md, CONTRIBUTING.md, LICENSE, docs/ folder
+    - Delete 12 troubleshooting/debug artifacts from repository root:
+      - COMMANDS_FIXED.md
+      - DEBUG_LOGGING_ADDED.md
+      - FIX_APPLIED.md
+      - HOW_TO_TEST.md
+      - QUICK_FIX.md
+      - TEST_COMMAND_REGISTRATION.md
+      - TESTING_GUIDE.md
+      - TEST_ON_THIS_REPO.md
+      - TROUBLESHOOTING_COMMAND_NOT_FOUND.md
+      - WEBVIEW_FIX_SUMMARY.md
+      - WEBVIEW_ISSUE_REPORT.md
+      - test-output.txt (876K debug output file)
+    - Keep legitimate documentation: README.md, CHANGELOG.md, CONTRIBUTING.md, LICENSE, docs/ folder
     - _Bug_Condition: isBugCondition(input) where input.repositoryRoot AND hasTroubleshootingFiles(input)_
-    - _Expected_Behavior: Troubleshooting files deleted, clean repository_
+    - _Expected_Behavior: 12 troubleshooting artifacts deleted, clean repository root_
     - _Preservation: Actual documentation preserved_
     - _Requirements: 2.16_
 
   - [ ] 15.3 Issue 1.17 - Add proper type annotations
-    - In WebviewManager.ts: Change panel type to `private panel: vscode.WebviewPanel | undefined`
-    - In FileHighlighter.ts: Add KiroAPI interface and type kiroAPI properly
-    - In FileHighlighter.ts: Type decorationProvider as `vscode.TextEditorDecorationType`
-    - In FileWatcher.ts: Type watchers as `private watchers: vscode.FileSystemWatcher[] = []`
-    - In ExtensionController.ts: Type subscriptions as `private subscriptions: vscode.Disposable[] = []`
-    - Replace all AST any parameters with proper tree-sitter types: `Parser.SyntaxNode`, `Parser.Tree`
-    - Add `import * as Parser from 'tree-sitter'` where needed
-    - NOTE: Do NOT enable noImplicitAny globally - it would cause hundreds of compilation errors. Fix critical any types manually instead.
-    - NOTE: tsconfig.json already has "strict": true enabled
-    - _Bug_Condition: isBugCondition(input) where input.typeAnnotations AND usesAnyType(input)_
-    - _Expected_Behavior: Critical any types properly annotated_
+    - Fix 10 explicit `any` annotations across 3 critical files:
+    - **WebviewManager.ts (3 instances)**:
+      - Line 14: Change `private panel: any = null` to `private panel: vscode.WebviewPanel | undefined`
+      - Line 23: Change `createWebview(): any` return type to proper WebviewPanel type
+      - Line 142: Change `private createWebviewPanel(): any` return type to proper WebviewPanel type
+    - **FileHighlighter.ts (2 instances)**:
+      - Line 19: Change `private decorationProvider: any = null` to `private decorationProvider: vscode.TextEditorDecorationType | null`
+      - Line 20: Change `private kiroAPI: any = null` — add a KiroAPI interface and type properly
+    - **ExtensionController.ts (5 instances)**:
+      - Line 38: Change Memento interface `update(key: string, value: any)` — use `unknown` or generic
+      - Line 42: Change `subscriptions: any[]` to `subscriptions: vscode.Disposable[]`
+      - Line 49: Change Command `callback: (...args: any[]) => any` — use `unknown` or proper types
+      - Lines 325, 391: Replace `as any` type assertions with proper message types
+    - NOTE: FileWatcher.ts has NO `any` types (already typed correctly) — remove from this task's scope
+    - NOTE: Do NOT enable noImplicitAny globally — it would cause hundreds of compilation errors. Fix these 10 critical `any` types manually.
+    - NOTE: tsconfig.json already has "strict": true enabled (catches implicit any, not explicit)
+    - _Bug_Condition: isBugCondition(input) where input.typeAnnotations AND usesExplicitAnyType(input)_
+    - _Expected_Behavior: 10 critical any types replaced with proper annotations_
     - _Preservation: Runtime behavior identical, compile-time safety improved_
     - _Requirements: 2.17_
 
@@ -531,10 +539,10 @@ These code quality fixes clean up debug statements, improve type safety, and enh
     - **IMPORTANT**: Re-run the SAME tests from task 13 - do NOT write new tests
     - Run bug condition exploration tests from step 13
     - **EXPECTED OUTCOME**: Tests PASS (confirms bugs are fixed)
-    - Verify no console.log statements remain
-    - Verify troubleshooting files are deleted
-    - Verify all types are properly annotated
-    - Verify webview uses nonce-based CSP
+    - Verify no console.log statements remain in any of the 9 production files
+    - Verify all 12 troubleshooting artifacts are deleted from repository root
+    - Verify 10 critical `any` types are properly annotated across 3 files
+    - Verify webview uses nonce-based CSP instead of unsafe-inline
     - _Requirements: 2.15, 2.16, 2.17, 2.20_
 
   - [ ] 15.6 Verify Phase 4 preservation tests still pass

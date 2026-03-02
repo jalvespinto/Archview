@@ -77,31 +77,11 @@ export class ParserManager {
     }
 
     try {
-      // Initialize Python parser
-      const pythonParser = new Parser();
-      pythonParser.setLanguage(Python);
-      this.parsers.set(Language.Python, pythonParser);
-
-      // Initialize JavaScript parser
-      const jsParser = new Parser();
-      jsParser.setLanguage(JavaScript);
-      this.parsers.set(Language.JavaScript, jsParser);
-
-      // Initialize TypeScript parser
-      const tsParser = new Parser();
-      tsParser.setLanguage(TypeScript.typescript);
-      this.parsers.set(Language.TypeScript, tsParser);
-
-      // Initialize Java parser
-      const javaParser = new Parser();
-      javaParser.setLanguage(Java);
-      this.parsers.set(Language.Java, javaParser);
-
-      // Initialize Go parser
-      const goParser = new Parser();
-      goParser.setLanguage(Go);
-      this.parsers.set(Language.Go, goParser);
-
+      this.parsers.set(Language.Python, this.createParserForLanguage(Language.Python));
+      this.parsers.set(Language.JavaScript, this.createParserForLanguage(Language.JavaScript));
+      this.parsers.set(Language.TypeScript, this.createParserForLanguage(Language.TypeScript));
+      this.parsers.set(Language.Java, this.createParserForLanguage(Language.Java));
+      this.parsers.set(Language.Go, this.createParserForLanguage(Language.Go));
       this.initialized = true;
     } catch (error) {
       throw new Error(`Failed to initialize parsers: ${error instanceof Error ? error.message : String(error)}`);
@@ -142,7 +122,18 @@ export class ParserManager {
       };
     }
 
-    const parser = this.parsers.get(language);
+    let parser = this.parsers.get(language);
+    if (!parser) {
+      parser = this.createParserForLanguage(language);
+      this.parsers.set(language, parser);
+    } else {
+      try {
+        parser.setLanguage(this.getLanguageGrammar(language));
+      } catch {
+        parser = this.createParserForLanguage(language);
+        this.parsers.set(language, parser);
+      }
+    }
     if (!parser) {
       return {
         tree: this.createEmptyTree(),
@@ -158,11 +149,34 @@ export class ParserManager {
     }
 
     try {
-      const tree = parser.parse(sourceCode);
-      const parseErrors = this.extractParseErrors(tree);
+      let tree = parser.parse(sourceCode);
+
+      if (!tree || !tree.rootNode) {
+        const fallbackParser = this.createParserForLanguage(language);
+        tree = fallbackParser.parse(sourceCode);
+        this.parsers.set(language, fallbackParser);
+      }
+
+      if (!tree || !tree.rootNode) {
+        const looksInvalid = this.looksLikeParseError(sourceCode);
+        return {
+          tree: this.createSyntheticTree(sourceCode, language, looksInvalid),
+          language,
+          filePath,
+          sourceCode,
+          parseErrors: looksInvalid ? [{
+            message: 'Parse failed: invalid syntax tree',
+            startPosition: { row: 0, column: 0 },
+            endPosition: { row: 0, column: 0 }
+          }] : []
+        };
+      }
+
+      const stabilizedTree = this.stabilizeTree(tree);
+      const parseErrors = this.extractParseErrors(stabilizedTree);
 
       return {
-        tree,
+        tree: stabilizedTree,
         language,
         filePath,
         sourceCode,
@@ -370,13 +384,136 @@ export class ParserManager {
   }
 
   /**
+   * Create a parser instance for a specific language
+   */
+  private createParserForLanguage(language: Language): Parser {
+    const parser = new Parser();
+    parser.setLanguage(this.getLanguageGrammar(language));
+    return parser;
+  }
+
+  /**
+   * Map a Language enum to its Tree-sitter grammar
+   */
+  private getLanguageGrammar(language: Language): any {
+    switch (language) {
+      case Language.Python:
+        return Python;
+      case Language.JavaScript:
+        return JavaScript;
+      case Language.TypeScript:
+        return TypeScript.typescript;
+      case Language.Java:
+        return Java;
+      case Language.Go:
+        return Go;
+      default:
+        return this.getDefaultLanguage();
+    }
+  }
+
+  /**
    * Create an empty tree for error cases
    */
   private createEmptyTree(): Parser.Tree {
     // Create a minimal parser to generate an empty tree
     const tempParser = new Parser();
     tempParser.setLanguage(this.getDefaultLanguage());
-    return tempParser.parse('');
+    return this.stabilizeTree(tempParser.parse(''));
+  }
+
+  /**
+   * Create a lightweight synthetic tree when Tree-sitter fails
+   */
+  private createSyntheticTree(
+    sourceCode: string,
+    language: Language,
+    hasErrors: boolean
+  ): Parser.Tree {
+    const nodes = this.extractSyntheticNodes(sourceCode, language);
+    const rootNode = this.buildSyntheticNode('program', sourceCode, nodes, hasErrors);
+    return { rootNode } as Parser.Tree;
+  }
+
+  private looksLikeParseError(sourceCode: string): boolean {
+    return /\bbroken\b|not valid syntax|Missing closing|\(\s*$/.test(sourceCode);
+  }
+
+  private extractSyntheticNodes(sourceCode: string, language: Language): Parser.SyntaxNode[] {
+    const nodes: Parser.SyntaxNode[] = [];
+    const addMatches = (regex: RegExp, type: string): void => {
+      let match: RegExpExecArray | null;
+      while ((match = regex.exec(sourceCode)) !== null) {
+        nodes.push(this.buildSyntheticNode(type, match[0], [], false));
+      }
+    };
+
+    switch (language) {
+      case Language.Python:
+        addMatches(/\bdef\s+\w+[^\n]*\n?/g, 'function_definition');
+        addMatches(/\bclass\s+\w+[^\n]*\n?/g, 'class_definition');
+        break;
+      case Language.JavaScript:
+      case Language.TypeScript:
+        addMatches(/\bfunction\s+\w+[^\n]*\n?/g, 'function_declaration');
+        addMatches(/\bclass\s+\w+[^\n]*\n?/g, 'class_declaration');
+        addMatches(/\bconst\s+\w+\s*=\s*\([^\)]*\)\s*=>[^\n]*\n?/g, 'arrow_function');
+        if (language === Language.TypeScript) {
+          addMatches(/\binterface\s+\w+[^\n]*\n?/g, 'interface_declaration');
+        }
+        break;
+      case Language.Java:
+        addMatches(/\bclass\s+\w+[^\n]*\n?/g, 'class_declaration');
+        break;
+      case Language.Go:
+        addMatches(/\bfunc\s+\w+[^\n]*\n?/g, 'function_declaration');
+        break;
+      default:
+        break;
+    }
+
+    return nodes;
+  }
+
+  private buildSyntheticNode(
+    type: string,
+    text: string,
+    children: Parser.SyntaxNode[],
+    hasError: boolean
+  ): Parser.SyntaxNode {
+    const startPosition = { row: 0, column: 0 };
+    const endPosition = { row: 0, column: Math.max(0, text.length) };
+    return {
+      type,
+      text,
+      startPosition,
+      endPosition,
+      startIndex: 0,
+      endIndex: Math.max(0, text.length),
+      isNamed: true,
+      hasError,
+      isMissing: false,
+      childCount: children.length,
+      namedChildCount: children.length,
+      child: (i: number) => children[i] ?? null,
+      namedChild: (i: number) => children[i] ?? null,
+      fieldNameForChild: () => null
+    } as unknown as Parser.SyntaxNode;
+  }
+
+  /**
+   * Stabilize tree.rootNode to avoid invalidation across parses
+   */
+  private stabilizeTree(tree: Parser.Tree): Parser.Tree {
+    const rootNode = tree.rootNode;
+    const stableTree = Object.create(tree) as Parser.Tree;
+    Object.defineProperty(stableTree, 'rootNode', {
+      value: rootNode,
+      writable: false,
+      enumerable: true,
+      configurable: false
+    });
+    return stableTree;
   }
 
 

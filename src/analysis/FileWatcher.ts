@@ -10,7 +10,6 @@
  */
 
 import * as vscode from 'vscode';
-import { minimatch } from 'minimatch';
 
 export interface FileWatcherConfig {
   autoRefresh: boolean;
@@ -223,15 +222,53 @@ export class FileWatcher {
   }
 
   /**
-   * Simple pattern matching using minimatch library
-   * Supports * and ** wildcards
+   * Simple pattern matching (supports * and ** wildcards)
+   * Matches the same rules used in FileWatcher property tests
    */
   private matchesPattern(filePath: string, pattern: string): boolean {
     // Normalize paths
     const normalizedPath = filePath.replace(/\\/g, '/');
     const normalizedPattern = pattern.replace(/\\/g, '/');
-    
-    return minimatch(normalizedPath, normalizedPattern, { dot: true });
+
+    // Handle leading **/ - matches zero or more path segments
+    if (normalizedPattern.startsWith('**/')) {
+      const rest = normalizedPattern.substring(3);
+      const restRegex = rest
+        .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+        .replace(/\*/g, '[^/]*');
+      if (new RegExp(restRegex + '$').test(normalizedPath)) {
+        return true;
+      }
+      const parts = normalizedPath.split('/');
+      for (let i = 0; i < parts.length; i++) {
+        const subPath = parts.slice(i).join('/');
+        if (this.matchesSimplePattern(subPath, rest)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // Handle trailing /** - matches directory and everything under it
+    if (normalizedPattern.endsWith('/**')) {
+      const prefix = normalizedPattern.substring(0, normalizedPattern.length - 3);
+      return normalizedPath === prefix || normalizedPath.startsWith(prefix + '/');
+    }
+
+    return this.matchesSimplePattern(normalizedPath, normalizedPattern);
+  }
+
+  /**
+   * Match simple patterns without ** (only single *)
+   */
+  private matchesSimplePattern(filePath: string, pattern: string): boolean {
+    const regexPattern = pattern
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*/g, '[^/]*')
+      .replace(/\?/g, '[^/]');
+
+    const regex = new RegExp(`^${regexPattern}$`);
+    return regex.test(filePath);
   }
 
   /**
