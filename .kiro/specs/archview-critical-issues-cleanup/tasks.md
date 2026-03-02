@@ -428,7 +428,7 @@ These code quality fixes clean up debug statements, improve type safety, and enh
 
 ### Exploratory Tests (Phase 4)
 
-- [ ] 13. Write bug condition exploration tests for Phase 4 issues
+- [x] 13. Write bug condition exploration tests for Phase 4 issues
   - **Property 1: Fault Condition** - Code Quality Issues
   - **CRITICAL**: These tests MUST FAIL on unfixed code - failures confirm the bugs exist
   - **DO NOT attempt to fix the tests or the code when they fail**
@@ -444,17 +444,21 @@ These code quality fixes clean up debug statements, improve type safety, and enh
   - Document counterexamples found in `src/__tests__/phase4-bug-exploration-results.md`
   - _Requirements: 2.15, 2.16, 2.17, 2.20_
 
-- [ ] 14. Write preservation property tests for Phase 4 (BEFORE implementing fixes)
+- [x] 14. Write preservation property tests for Phase 4 (BEFORE implementing fixes)
   - **Property 2: Preservation** - Core Functionality Unchanged
-  - **IMPORTANT**: Follow observation-first methodology
-  - Observe behavior on UNFIXED code for normal operations
-  - Test webview rendering and interaction
-  - Test type checking for properly typed code
-  - Test command execution
-  - Write property-based tests capturing observed behavior
+  - **IMPORTANT**: Follow observation-first methodology — observe behavior on UNFIXED code, write tests that PASS on both unfixed and fixed code
+  - **METHODOLOGY**: Instantiate real objects where possible (FileHighlighter, WebviewMessageHandler with mocked dependencies). For WebviewManager/ExtensionController, use minimal mocks for VS Code API. Use `fast-check` for property-based tests where inputs vary. Focus on observable behavior (public API contracts), NOT internal implementation details.
+  - **OUTPUT**: Create `src/__tests__/phase4-preservation.pbt.test.ts` and document results in `src/__tests__/phase4-preservation-results.md`
+  - Test file highlighting state (preserves 15.3 type changes in FileHighlighter): highlightFiles() adds paths to set, getHighlightedFiles() returns correct set, clearHighlights() empties it, isFileHighlighted() returns correct boolean (4 tests)
+  - Test message dispatch routing (preserves 15.1 log removal from WebviewMessageHandler): element selection callback fires on selection message, abstraction level change callback fires, export request callback fires, setDiagramData() updates state (4 tests)
+  - Test WebviewManager lifecycle (preserves 15.3 panel type change + 15.4 CSP change): isActive() returns false when no webview, onMessage() handler registration doesn't throw, multiple handlers can be registered, postMessage() handles no-panel gracefully (4 tests)
+  - Test webview HTML structure (preserves 15.4 CSP change — HIGHEST RISK): getInlineStyles() returns non-empty CSS string containing expected selectors, getInlineScript() returns non-empty JS string containing expected function names, HTML output (if accessible) contains `<style>`, `<script>`, and `<meta>` CSP tags. NOTE: getInlineStyles/getInlineScript are private — test via source reading if necessary, or create test subclass (3 tests)
+  - Test extension state management (preserves 15.1 log removal + 15.3 type changes in ExtensionController): getState() returns valid ExtensionState with all required fields (analysisResult, groundingData, abstractionLevel, etc.), setState() updates and getState() reflects changes, state has correct initial values, selectedElement can be set and cleared (4 tests)
+  - Test project compilation (preserves 15.2 file deletions + 15.3 type changes): TypeScript compilation succeeds (`tsc --noEmit`), no import references to troubleshooting files exist (2 tests)
   - Run tests on UNFIXED code
-  - **EXPECTED OUTCOME**: Tests PASS (confirms baseline behavior)
-  - _Requirements: 3.1, 3.2, 3.4_
+  - **EXPECTED OUTCOME**: Tests PASS (~21 tests, confirms baseline behavior)
+  - Document results in `src/__tests__/phase4-preservation-results.md`
+  - _Requirements: 3.1, 3.2, 3.4, 3.9_
 
 
 ### Implementation (Phase 4)
@@ -547,12 +551,15 @@ These code quality fixes clean up debug statements, improve type safety, and enh
 
   - [ ] 15.6 Verify Phase 4 preservation tests still pass
     - **Property 2: Preservation** - Core Functionality Unchanged
-    - **IMPORTANT**: Re-run the SAME tests from task 14 - do NOT write new tests
+    - **IMPORTANT**: Re-run the SAME tests from task 14 — do NOT write new tests
     - Run preservation property tests from step 14
-    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions)
-    - Confirm webview rendering still works
-    - Confirm type checking still works
-    - Confirm commands still work
+    - **EXPECTED OUTCOME**: All ~21 tests PASS (confirms no regressions)
+    - Confirm file highlighting state management works (highlightFiles, clearHighlights, isFileHighlighted)
+    - Confirm message dispatch routing works (selection, abstraction, export callbacks)
+    - Confirm WebviewManager lifecycle works (isActive, onMessage registration)
+    - Confirm webview HTML structure preserved (inline styles, script, CSP tag present)
+    - Confirm extension state management works (getState, setState, initial values)
+    - Confirm project compiles and no import references to deleted files
 
 - [ ] 16. Phase 4 Checkpoint - Ensure all tests pass
   - Run full test suite for Phase 4 (`npm test`)
