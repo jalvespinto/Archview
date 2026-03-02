@@ -185,8 +185,8 @@ export class MockProgressNotifier implements IProgressNotifier {
   private cancellationListeners: Array<() => void> = [];
 
   async withProgress<T>(
-    title: string,
-    cancellable: boolean,
+    _title: string,
+    _cancellable: boolean,
     task: (progress: IProgress, token: ICancellationToken) => Promise<T>
   ): Promise<T> {
     const progress: IProgress = {
@@ -195,19 +195,22 @@ export class MockProgressNotifier implements IProgressNotifier {
       }
     };
 
-    const self = this;
     const token: ICancellationToken = {
       get isCancellationRequested() {
-        return self._cancelled;
+        return false;
       },
       onCancellationRequested: (listener) => {
-        self.cancellationListeners.push(listener);
+        this.cancellationListeners.push(listener);
         // If already cancelled, call listener immediately
-        if (self._cancelled) {
+        if (this._cancelled) {
           listener();
         }
       }
     };
+
+    Object.defineProperty(token, 'isCancellationRequested', {
+      get: () => this._cancelled
+    });
 
     return task(progress, token);
   }

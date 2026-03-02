@@ -6,10 +6,12 @@ module.exports = {
   moduleNameMapper: {
     '^vscode$': '<rootDir>/src/__mocks__/vscode.ts'
   },
+  modulePathIgnorePatterns: ['<rootDir>/dist/'],
   projects: [
     {
       displayName: 'node',
       testEnvironment: 'node',
+      roots: ['<rootDir>/src'],
       testMatch: ['**/__tests__/**/*.test.ts', '!**/__tests__/**/*.browser.test.ts'],
       preset: 'ts-jest',
       moduleNameMapper: {
@@ -19,6 +21,7 @@ module.exports = {
     {
       displayName: 'jsdom',
       testEnvironment: 'jsdom',
+      roots: ['<rootDir>/src'],
       testMatch: ['**/__tests__/**/*.browser.test.ts'],
       preset: 'ts-jest',
       moduleNameMapper: {
@@ -45,6 +48,5 @@ module.exports = {
     '^.+\\.ts$': 'ts-jest'
   },
   testTimeout: 30000,
-  verbose: true,
-  forceExit: true
+  verbose: true
 };

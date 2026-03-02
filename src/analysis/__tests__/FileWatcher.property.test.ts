@@ -4,6 +4,7 @@
  */
 
 import * as fc from 'fast-check';
+import { minimatch } from 'minimatch';
 import { FileWatcher, FileWatcherConfig, FileChangeEvent } from '../FileWatcher';
 
 // Type guard to help TypeScript narrow types
@@ -371,53 +372,8 @@ function shouldBeExcluded(filePath: string, config: FileWatcherConfig): boolean 
   return false;
 }
 
-/**
- * Simple pattern matching (supports * and ** wildcards)
- * Matches the logic in FileWatcher
- */
 function matchesPattern(filePath: string, pattern: string): boolean {
-  // Normalize paths
   const normalizedPath = filePath.replace(/\\/g, '/');
   const normalizedPattern = pattern.replace(/\\/g, '/');
-  
-  // Handle leading **/ - matches zero or more path segments
-  if (normalizedPattern.startsWith('**/')) {
-    const rest = normalizedPattern.substring(3);
-    // Check if path ends with the rest of the pattern
-    const restRegex = rest.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*');
-    if (new RegExp(restRegex + '$').test(normalizedPath)) {
-      return true;
-    }
-    // Or if any segment matches
-    const parts = normalizedPath.split('/');
-    for (let i = 0; i < parts.length; i++) {
-      const subPath = parts.slice(i).join('/');
-      if (matchesSimplePattern(subPath, rest)) {
-        return true;
-      }
-    }
-    return false;
-  }
-  
-  // Handle trailing /** - matches directory and everything under it
-  if (normalizedPattern.endsWith('/**')) {
-    const prefix = normalizedPattern.substring(0, normalizedPattern.length - 3);
-    return normalizedPath === prefix || normalizedPath.startsWith(prefix + '/');
-  }
-  
-  return matchesSimplePattern(normalizedPath, normalizedPattern);
-}
-
-/**
- * Match simple patterns without ** (only single *)
- */
-function matchesSimplePattern(path: string, pattern: string): boolean {
-  // Convert glob pattern to regex
-  const regexPattern = pattern
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape regex special chars
-    .replace(/\*/g, '[^/]*') // * matches anything except /
-    .replace(/\?/g, '[^/]'); // ? matches single char except /
-  
-  const regex = new RegExp(`^${regexPattern}$`);
-  return regex.test(path);
+  return minimatch(normalizedPath, normalizedPattern, { dot: true });
 }

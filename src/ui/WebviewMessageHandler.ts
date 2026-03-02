@@ -91,7 +91,7 @@ export class WebviewMessageHandler {
         this.handleError(message.message);
         break;
       default:
-        console.warn('Unknown message type:', (message as any).type);
+        console.warn('Unknown message type:', (message as { type?: string }).type);
     }
   }
 
@@ -194,7 +194,7 @@ export class WebviewMessageHandler {
   /**
    * Handle error message from webview
    */
-  private handleError(message: string): void {
+  private handleError(_message: string): void {
     // Could show error notification to user
   }
 
@@ -221,7 +221,7 @@ export class WebviewMessageHandler {
     const filteredNodes = data.nodes.filter(node => {
       // Include nodes at or below the selected abstraction level
       // Assuming nodes without abstractionLevel are at level 1 (Overview)
-      const nodeLevel = (node as any).abstractionLevel || AbstractionLevel.Overview;
+      const nodeLevel = (node as { abstractionLevel?: AbstractionLevel }).abstractionLevel || AbstractionLevel.Overview;
       return nodeLevel <= level;
     });
 

@@ -10,7 +10,6 @@
  */
 
 import * as fs from 'fs/promises';
-import * as path from 'path';
 import * as crypto from 'crypto';
 
 /**
@@ -27,7 +26,7 @@ export interface FileBatch {
 export interface ParseResult {
   filePath: string;
   success: boolean;
-  ast?: any;
+  ast?: unknown;
   error?: string;
 }
 
@@ -38,7 +37,7 @@ interface IncrementalCacheEntry {
   filePath: string;
   content: string;
   contentHash: string;
-  ast: any;
+  ast: unknown;
   timestamp: number;
 }
 
@@ -278,13 +277,13 @@ export class AnalysisOptimizer {
  * AST traversal cache for optimizing node lookups
  */
 export class ASTTraversalCache {
-  private nodesByType: Map<string, any[]> = new Map();
-  private nodesByName: Map<string, any[]> = new Map();
+  private nodesByType: Map<string, TraversableAstNode[]> = new Map();
+  private nodesByName: Map<string, TraversableAstNode[]> = new Map();
 
   /**
    * Index AST nodes by type and name
    */
-  indexAST(ast: any): void {
+  indexAST(ast: TraversableAstRoot | null | undefined): void {
     this.nodesByType.clear();
     this.nodesByName.clear();
 
@@ -298,7 +297,7 @@ export class ASTTraversalCache {
   /**
    * Traverse AST and build indexes
    */
-  private traverseAndIndex(node: any): void {
+  private traverseAndIndex(node: TraversableAstNode): void {
     if (!node) return;
 
     // Index by type
@@ -328,14 +327,14 @@ export class ASTTraversalCache {
   /**
    * Get nodes by type
    */
-  getNodesByType(type: string): any[] {
+  getNodesByType(type: string): TraversableAstNode[] {
     return this.nodesByType.get(type) || [];
   }
 
   /**
    * Get nodes by name
    */
-  getNodesByName(name: string): any[] {
+  getNodesByName(name: string): TraversableAstNode[] {
     return this.nodesByName.get(name) || [];
   }
 
@@ -346,4 +345,14 @@ export class ASTTraversalCache {
     this.nodesByType.clear();
     this.nodesByName.clear();
   }
+}
+
+interface TraversableAstNode {
+  type: string;
+  text?: string;
+  children?: TraversableAstNode[];
+}
+
+interface TraversableAstRoot {
+  rootNode?: TraversableAstNode;
 }

@@ -3,6 +3,7 @@
  * Requirements: 8.1, 8.6
  */
 
+import * as vscode from 'vscode';
 import { ExtensionController } from './ExtensionController';
 
 // Global extension controller instance
@@ -12,7 +13,7 @@ let controller: ExtensionController | null = null;
  * Activate extension
  * Requirements: 8.1, 8.6
  */
-export async function activate(context: any): Promise<void> {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
   controller = new ExtensionController();
   await controller.activate(context);
 }

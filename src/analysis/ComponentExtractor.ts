@@ -18,7 +18,7 @@ import {
   AbstractionLevel,
   ComponentMetadata
 } from '../types';
-import { ParsedAST, ParserManager } from './ParserManager';
+import { ParsedAST, ParserManager, ExtractedNode } from './ParserManager';
 import { findNodeInTree } from '../utils/astUtils';
 
 /**
@@ -526,7 +526,7 @@ export class ComponentExtractor {
   // Helper Methods - Name Extraction
   // ============================================================================
 
-  private extractPythonClassName(node: any, sourceCode: string): string | null {
+  private extractPythonClassName(node: ExtractedNode, _sourceCode: string): string | null {
     // class_definition has a 'name' field
     if (node.children && node.children.length > 0) {
       for (const child of node.children) {
@@ -538,7 +538,7 @@ export class ComponentExtractor {
     return null;
   }
 
-  private extractPythonFunctionName(node: any, sourceCode: string): string | null {
+  private extractPythonFunctionName(node: ExtractedNode, _sourceCode: string): string | null {
     // function_definition has a 'name' field
     if (node.children && node.children.length > 0) {
       for (const child of node.children) {
@@ -550,7 +550,7 @@ export class ComponentExtractor {
     return null;
   }
 
-  private extractJSClassName(node: any, sourceCode: string): string | null {
+  private extractJSClassName(node: ExtractedNode, _sourceCode: string): string | null {
     // class_declaration has a 'name' field
     if (node.children && node.children.length > 0) {
       for (const child of node.children) {
@@ -562,7 +562,7 @@ export class ComponentExtractor {
     return null;
   }
 
-  private extractJSMethodName(node: any, sourceCode: string): string | null {
+  private extractJSMethodName(node: ExtractedNode, _sourceCode: string): string | null {
     // method_definition has a 'name' field (property_identifier)
     if (node.children && node.children.length > 0) {
       for (const child of node.children) {
@@ -574,7 +574,7 @@ export class ComponentExtractor {
     return null;
   }
 
-  private extractJSFunctionName(node: any, sourceCode: string): string | null {
+  private extractJSFunctionName(node: ExtractedNode, _sourceCode: string): string | null {
     // function_declaration has a 'name' field
     if (node.children && node.children.length > 0) {
       for (const child of node.children) {
@@ -586,7 +586,7 @@ export class ComponentExtractor {
     return null;
   }
 
-  private extractTSInterfaceName(node: any, sourceCode: string): string | null {
+  private extractTSInterfaceName(node: ExtractedNode, _sourceCode: string): string | null {
     // interface_declaration has a 'name' field
     if (node.children && node.children.length > 0) {
       for (const child of node.children) {
@@ -598,7 +598,7 @@ export class ComponentExtractor {
     return null;
   }
 
-  private extractJavaClassName(node: any, sourceCode: string): string | null {
+  private extractJavaClassName(node: ExtractedNode, _sourceCode: string): string | null {
     // class_declaration has a 'name' field
     if (node.children && node.children.length > 0) {
       for (const child of node.children) {
@@ -610,7 +610,7 @@ export class ComponentExtractor {
     return null;
   }
 
-  private extractJavaMethodName(node: any, sourceCode: string): string | null {
+  private extractJavaMethodName(node: ExtractedNode, _sourceCode: string): string | null {
     // method_declaration has a 'name' field
     if (node.children && node.children.length > 0) {
       for (const child of node.children) {
@@ -622,7 +622,7 @@ export class ComponentExtractor {
     return null;
   }
 
-  private extractJavaInterfaceName(node: any, sourceCode: string): string | null {
+  private extractJavaInterfaceName(node: ExtractedNode, _sourceCode: string): string | null {
     // interface_declaration has a 'name' field
     if (node.children && node.children.length > 0) {
       for (const child of node.children) {
@@ -634,7 +634,7 @@ export class ComponentExtractor {
     return null;
   }
 
-  private extractJavaPackageName(node: Parser.SyntaxNode, sourceCode: string): string | null {
+  private extractJavaPackageName(node: Parser.SyntaxNode, _sourceCode: string): string | null {
     // Look for package_declaration at the top of the file
     for (let i = 0; i < node.childCount; i++) {
       const child = node.child(i);
@@ -651,7 +651,7 @@ export class ComponentExtractor {
     return null;
   }
 
-  private extractGoPackageName(node: Parser.SyntaxNode, sourceCode: string): string | null {
+  private extractGoPackageName(node: Parser.SyntaxNode, _sourceCode: string): string | null {
     // Look for package_clause at the top of the file
     for (let i = 0; i < node.childCount; i++) {
       const child = node.child(i);
@@ -668,7 +668,7 @@ export class ComponentExtractor {
     return null;
   }
 
-  private extractGoStructName(node: any, sourceCode: string): string | null {
+  private extractGoStructName(node: ExtractedNode, _sourceCode: string): string | null {
     // type_declaration contains type_spec with name and type
     if (node.children && node.children.length > 0) {
       for (const child of node.children) {
@@ -695,7 +695,7 @@ export class ComponentExtractor {
     return null;
   }
 
-  private extractGoFunctionName(node: any, sourceCode: string): string | null {
+  private extractGoFunctionName(node: ExtractedNode, _sourceCode: string): string | null {
     // function_declaration or method_declaration has a 'name' field
     if (node.children && node.children.length > 0) {
       for (const child of node.children) {
@@ -707,7 +707,7 @@ export class ComponentExtractor {
     return null;
   }
 
-  private extractGoMethodReceiver(node: any, sourceCode: string): string | null {
+  private extractGoMethodReceiver(node: ExtractedNode, _sourceCode: string): string | null {
     // method_declaration has a 'receiver' field (parameter_list)
     if (node.type !== 'method_declaration') {
       return null;

@@ -22,14 +22,6 @@ interface CacheEntry {
 }
 
 /**
- * Cache key structure
- */
-interface CacheKey {
-  groundingHash: string;
-  tier: 1 | 2 | 3;
-}
-
-/**
  * LRU cache for ArchitecturalModel responses
  */
 export class ArchitecturalModelCache {

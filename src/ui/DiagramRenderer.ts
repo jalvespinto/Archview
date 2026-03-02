@@ -7,19 +7,19 @@
  * TypeScript may show errors for HTMLElement and document, but these are available at runtime.
  */
 
-import cytoscape, { Core, NodeSingular, EdgeSingular, LayoutOptions, StylesheetCSS } from 'cytoscape';
-// @ts-ignore - cytoscape-dagre doesn't have type definitions
+import cytoscape, { Core, NodeSingular, LayoutOptions } from 'cytoscape';
+// @ts-expect-error - cytoscape-dagre doesn't have type definitions
 import dagre from 'cytoscape-dagre';
-import { DiagramData, DiagramNode, DiagramEdge, AbstractionLevel } from '../types';
+import { DiagramData } from '../types';
 
 // Register dagre layout
 cytoscape.use(dagre);
 
 // Browser globals (available in webview context)
-declare const document: any;
+declare const document: Document;
 
 // Type for HTML elements in browser context
-type BrowserHTMLElement = any;
+type BrowserHTMLElement = HTMLElement;
 
 /**
  * DiagramRenderer handles all diagram rendering and interaction in the browser
@@ -30,8 +30,8 @@ export class DiagramRenderer {
   private onElementClickHandler: ((elementId: string) => void) | null = null;
   private onElementHoverHandler: ((elementId: string) => void) | null = null;
   private selectedElementId: string | null = null;
-  private zoomDebounceTimer: any = null;
-  private panDebounceTimer: any = null;
+  private zoomDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private panDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly DEBOUNCE_DELAY_MS = 100; // 100ms debounce
 
   /**
@@ -43,7 +43,7 @@ export class DiagramRenderer {
     
     this.cy = cytoscape({
       container,
-      style: this.getDefaultStyles(),
+      style: this.getDefaultStyles() as cytoscape.StylesheetJson,
       minZoom: 0.25,
       maxZoom: 4.0,
       wheelSensitivity: 0.2,
@@ -110,7 +110,7 @@ export class DiagramRenderer {
       // Dagre hierarchical layout for architecture diagrams
       layoutOptions = {
         name: 'dagre',
-        // @ts-ignore - dagre-specific options
+        // @ts-expect-error - dagre-specific options
         rankDir: 'TB', // Top to bottom
         nodeSep: 50,
         edgeSep: 10,
@@ -485,7 +485,7 @@ export class DiagramRenderer {
    * Get default Cytoscape styles
    * Requirements: 2.7, 5.3
    */
-  private getDefaultStyles(): any[] {
+  private getDefaultStyles() {
     return [
       {
         selector: 'node',

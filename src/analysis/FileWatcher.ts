@@ -10,6 +10,8 @@
  */
 
 import * as vscode from 'vscode';
+import * as path from 'path';
+import { minimatch } from 'minimatch';
 
 export interface FileWatcherConfig {
   autoRefresh: boolean;
@@ -35,6 +37,7 @@ export class FileWatcher {
   private config: FileWatcherConfig;
   private callback: FileChangeCallback | null = null;
   private isWatching: boolean = false;
+  private workspaceRoot: string | null = null;
 
   constructor(config: FileWatcherConfig) {
     this.config = config;
@@ -53,6 +56,7 @@ export class FileWatcher {
       return;
     }
 
+    this.workspaceRoot = workspaceRoot;
     this.callback = callback;
     this.isWatching = true;
 
@@ -79,6 +83,7 @@ export class FileWatcher {
 
     this.watchers = [];
     this.isWatching = false;
+    this.workspaceRoot = null;
     this.clearDebounceTimer();
     this.changedFiles.clear();
   }
@@ -222,62 +227,39 @@ export class FileWatcher {
   }
 
   /**
-   * Simple pattern matching (supports * and ** wildcards)
-   * Matches the same rules used in FileWatcher property tests
+   * Pattern matching using minimatch for consistency with FileScanner
    */
   private matchesPattern(filePath: string, pattern: string): boolean {
-    // Normalize paths
     const normalizedPath = filePath.replace(/\\/g, '/');
     const normalizedPattern = pattern.replace(/\\/g, '/');
+    const options = { dot: true };
 
-    // Handle leading **/ - matches zero or more path segments
-    if (normalizedPattern.startsWith('**/')) {
-      const rest = normalizedPattern.substring(3);
-      const restRegex = rest
-        .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-        .replace(/\*/g, '[^/]*');
-      if (new RegExp(restRegex + '$').test(normalizedPath)) {
+    if (path.isAbsolute(normalizedPattern)) {
+      return minimatch(normalizedPath, normalizedPattern, options);
+    }
+
+    // Watcher events typically provide absolute paths, while configuration
+    // patterns are workspace-relative (for example: src/**/*.ts).
+    if (this.workspaceRoot) {
+      const relativePath = path.relative(this.workspaceRoot, filePath).replace(/\\/g, '/');
+      if (
+        relativePath &&
+        !relativePath.startsWith('..') &&
+        !path.isAbsolute(relativePath) &&
+        minimatch(relativePath, normalizedPattern, options)
+      ) {
         return true;
       }
-      const parts = normalizedPath.split('/');
-      for (let i = 0; i < parts.length; i++) {
-        const subPath = parts.slice(i).join('/');
-        if (this.matchesSimplePattern(subPath, rest)) {
-          return true;
-        }
-      }
-      return false;
     }
 
-    // Handle trailing /** - matches directory and everything under it
-    if (normalizedPattern.endsWith('/**')) {
-      const prefix = normalizedPattern.substring(0, normalizedPattern.length - 3);
-      return normalizedPath === prefix || normalizedPath.startsWith(prefix + '/');
-    }
-
-    return this.matchesSimplePattern(normalizedPath, normalizedPattern);
-  }
-
-  /**
-   * Match simple patterns without ** (only single *)
-   */
-  private matchesSimplePattern(filePath: string, pattern: string): boolean {
-    const regexPattern = pattern
-      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-      .replace(/\*/g, '[^/]*')
-      .replace(/\?/g, '[^/]');
-
-    const regex = new RegExp(`^${regexPattern}$`);
-    return regex.test(filePath);
+    return minimatch(normalizedPath, normalizedPattern, options);
   }
 
   /**
    * Get current workspace root (placeholder)
    */
   private getCurrentWorkspaceRoot(): string | null {
-    // This would be stored when start() is called
-    // For now, return null as placeholder
-    return null;
+    return this.workspaceRoot;
   }
 
   /**

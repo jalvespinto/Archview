@@ -21,8 +21,7 @@ import {
   ImportEdge,
   InheritanceEdge,
   ClassGroundingData,
-  FunctionGroundingData,
-  ImportRef
+  FunctionGroundingData
 } from '../types/analysis';
 import {
   Language,
@@ -33,7 +32,8 @@ import {
   RelationshipType
 } from '../types';
 import { FileScanner, ScanOptions } from './FileScanner';
-import { ParserManager } from './ParserManager';
+import { ScannedFile } from './FileScanner';
+import { ParserManager, ParsedAST } from './ParserManager';
 import { ComponentExtractor } from './ComponentExtractor';
 import { RelationshipExtractor } from './RelationshipExtractor';
 import { MemoryManager, MemoryLimitExceededError } from '../performance/MemoryManager';
@@ -81,7 +81,7 @@ export class AnalysisService {
   private relationshipExtractor: RelationshipExtractor;
   private cache: Map<string, CacheEntry>;
   private lastProgressUpdate: number = 0;
-  private readonly PROGRESS_UPDATE_INTERVAL_MS = 5000; // 5 seconds
+  private readonly progressUpdateIntervalMs = 5000; // 5 seconds
   private memoryManager: MemoryManager;
   private optimizer: AnalysisOptimizer;
 
@@ -170,9 +170,8 @@ export class AnalysisService {
 
       // Parse files using parallel processing (Requirements: 9.3)
       interface ParseTaskResult {
-        scannedFile: any;
-        sourceCode: string;
-        ast: any;
+        scannedFile: ScannedFile;
+        ast: ParsedAST;
       }
 
       const parseResults = await this.optimizer.parseFilesInParallel<ParseTaskResult>(
@@ -198,7 +197,7 @@ export class AnalysisService {
             }
           );
 
-          return { scannedFile, sourceCode, ast };
+          return { scannedFile, ast };
         }
       );
 
@@ -207,7 +206,7 @@ export class AnalysisService {
         this.checkCancellation(cancellationToken);
         this.checkTimeout(startTime, timeoutMs, 'File parsing');
 
-        const { scannedFile, sourceCode, ast } = parseResults[i];
+        const { scannedFile, ast } = parseResults[i];
         
         // Report progress every 5 seconds or every 10% of files
         const progressPercentage = 10 + Math.floor((i / totalFiles) * 60);
@@ -321,63 +320,24 @@ export class AnalysisService {
     filePath: string,
     language: Language,
     components: Component[],
-    sourceCode: string
+    _sourceCode: string
   ): FileGroundingData {
+    const moduleComponent = this.findModuleComponent(filePath, components);
+    if (!moduleComponent) {
+      return this.createEmptyFileGroundingData(filePath, language);
+    }
+
     const exports: string[] = [];
     const classes: ClassGroundingData[] = [];
     const topLevelFunctions: FunctionGroundingData[] = [];
-    const imports: ImportRef[] = [];
 
-    // Find the module component (top-level)
-    const moduleComponent = components.find(
-      c => c.filePaths.includes(filePath) && 
-           (c.type === ComponentType.Module || c.type === ComponentType.Package)
-    );
-
-    if (!moduleComponent) {
-      return { path: filePath, language, exports, classes, topLevelFunctions, imports };
-    }
-
-    // Extract exports from module metadata
     if (moduleComponent.metadata.exportedSymbols) {
       exports.push(...moduleComponent.metadata.exportedSymbols);
     }
 
-    // Extract classes and their methods
-    for (const component of components) {
-      if (component.type === ComponentType.Class && component.parent === moduleComponent.id) {
-        const classData: ClassGroundingData = {
-          name: component.name,
-          superClass: undefined,
-          interfaces: [],
-          methods: []
-        };
-
-        // Find methods of this class
-        const methods = components.filter(c => c.parent === component.id && c.type === ComponentType.Function);
-        classData.methods = methods.map(m => m.name.split('.').pop() || m.name);
-
-        classes.push(classData);
-        exports.push(component.name);
-      }
-    }
-
-    // Extract top-level functions
-    for (const component of components) {
-      if (component.type === ComponentType.Function && component.parent === moduleComponent.id) {
-        topLevelFunctions.push({
-          name: component.name
-        });
-        exports.push(component.name);
-      }
-    }
-
-    // Extract interfaces (TypeScript/Java)
-    for (const component of components) {
-      if (component.type === ComponentType.Interface && component.parent === moduleComponent.id) {
-        exports.push(component.name);
-      }
-    }
+    this.collectClasses(moduleComponent.id, components, classes, exports);
+    this.collectTopLevelFunctions(moduleComponent.id, components, topLevelFunctions, exports);
+    this.collectInterfaceExports(moduleComponent.id, components, exports);
 
     return {
       path: filePath,
@@ -385,8 +345,80 @@ export class AnalysisService {
       exports,
       classes,
       topLevelFunctions,
-      imports // Will be populated from relationships in a future enhancement
+      imports: [] // Will be populated from relationships in a future enhancement
     };
+  }
+
+  private findModuleComponent(filePath: string, components: Component[]): Component | undefined {
+    return components.find((component) =>
+      component.filePaths.includes(filePath) &&
+      (component.type === ComponentType.Module || component.type === ComponentType.Package)
+    );
+  }
+
+  private createEmptyFileGroundingData(filePath: string, language: Language): FileGroundingData {
+    return {
+      path: filePath,
+      language,
+      exports: [],
+      classes: [],
+      topLevelFunctions: [],
+      imports: []
+    };
+  }
+
+  private collectClasses(
+    moduleComponentId: string,
+    components: Component[],
+    classes: ClassGroundingData[],
+    exports: string[]
+  ): void {
+    const moduleClasses = components.filter(
+      (component) => component.type === ComponentType.Class && component.parent === moduleComponentId
+    );
+
+    for (const classComponent of moduleClasses) {
+      const methods = components
+        .filter((component) => component.parent === classComponent.id && component.type === ComponentType.Function)
+        .map((methodComponent) => methodComponent.name.split('.').pop() || methodComponent.name);
+
+      classes.push({
+        name: classComponent.name,
+        superClass: undefined,
+        interfaces: [],
+        methods
+      });
+      exports.push(classComponent.name);
+    }
+  }
+
+  private collectTopLevelFunctions(
+    moduleComponentId: string,
+    components: Component[],
+    topLevelFunctions: FunctionGroundingData[],
+    exports: string[]
+  ): void {
+    const moduleFunctions = components.filter(
+      (component) => component.type === ComponentType.Function && component.parent === moduleComponentId
+    );
+
+    for (const functionComponent of moduleFunctions) {
+      topLevelFunctions.push({ name: functionComponent.name });
+      exports.push(functionComponent.name);
+    }
+  }
+
+  private collectInterfaceExports(
+    moduleComponentId: string,
+    components: Component[],
+    exports: string[]
+  ): void {
+    const moduleInterfaces = components.filter(
+      (component) => component.type === ComponentType.Interface && component.parent === moduleComponentId
+    );
+    for (const interfaceComponent of moduleInterfaces) {
+      exports.push(interfaceComponent.name);
+    }
   }
 
   /**
@@ -570,7 +602,18 @@ export class AnalysisService {
   clearCacheForFile(filePath: string): void {
     // Remove entries from cache that include this file
     for (const [key, value] of this.cache.entries()) {
-      if (value.fileModTimes.has(filePath)) {
+      const normalizedInput = path.normalize(filePath);
+      const hasMatchingPath = Array.from(value.fileModTimes.keys()).some((cachedPath) => {
+        // Cache keys are relative paths; incoming file paths are often absolute.
+        if (path.normalize(cachedPath) === normalizedInput) {
+          return true;
+        }
+
+        const absoluteCachedPath = path.normalize(path.join(value.groundingData.rootPath, cachedPath));
+        return absoluteCachedPath === normalizedInput;
+      });
+
+      if (hasMatchingPath) {
         this.cache.delete(key);
       }
     }
@@ -593,7 +636,7 @@ export class AnalysisService {
     }
 
     const now = Date.now();
-    if (now - this.lastProgressUpdate >= this.PROGRESS_UPDATE_INTERVAL_MS || percentage === 100) {
+    if (now - this.lastProgressUpdate >= this.progressUpdateIntervalMs || percentage === 100) {
       callback(percentage, message);
       this.lastProgressUpdate = now;
     }

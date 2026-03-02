@@ -10,11 +10,9 @@
  * - Handle configuration changes
  */
 
-import * as path from 'path';
 import * as vscode from 'vscode';
 import {
   AnalysisResult,
-  DiagramData,
   AbstractionLevel,
   AnalysisConfig,
   Language,
@@ -42,11 +40,6 @@ interface ExtensionContext {
   subscriptions: vscode.Disposable[];
   globalState: Memento;
   workspaceState: Memento;
-}
-
-interface Command {
-  command: string;
-  callback: (...args: unknown[]) => unknown;
 }
 
 /**
@@ -80,6 +73,7 @@ export class ExtensionController {
   private fileWatcher: FileWatcher | null = null;
   private errorHandler: ErrorHandler | null = null;
   private memoryManager: MemoryManager;
+  private webviewMessageSubscription: { dispose: () => void } | null = null;
   
   // State management (Requirements: 5.5, 6.6, 11.4, 11.5)
   private state: ExtensionState = {
@@ -115,14 +109,14 @@ export class ExtensionController {
     // Initialize error handler
     // TODO: Use actual Kiro output channel and window API
     const outputChannel = {
-      appendLine: (value: string) => {},
+      appendLine: (_value: string) => {},
       show: () => {}
     };
     const notifier = {
-      showErrorMessage: async (message: string, ...items: string[]) => {
+      showErrorMessage: async (_message: string, ..._items: string[]) => {
         return undefined;
       },
-      showWarningMessage: async (message: string, ...items: string[]) => {
+      showWarningMessage: async (_message: string, ..._items: string[]) => {
         return undefined;
       }
     };
@@ -161,6 +155,10 @@ export class ExtensionController {
       this.fileWatcher.stop();
     }
 
+    // Dispose webview message subscription to avoid handler accumulation
+    this.webviewMessageSubscription?.dispose();
+    this.webviewMessageSubscription = null;
+
     // Clean up resources with memory release (Requirements: 9.4)
     await this.memoryManager.releaseMemory(async () => {
       this.webviewManager.disposeWebview();
@@ -198,8 +196,13 @@ export class ExtensionController {
     // Register exportDiagram
     const exportDisposable = vscode.commands.registerCommand(
       'archview.exportDiagram',
-      async (format: 'png' | 'svg') => {
-        await this.exportDiagram(format);
+      async (format: unknown) => {
+        const exportFormat = this.normalizeExportFormat(format);
+        if (!exportFormat) {
+          vscode.window.showErrorMessage('Invalid export format. Use "png" or "svg".');
+          return;
+        }
+        await this.exportDiagram(exportFormat);
       }
     );
 
@@ -384,7 +387,7 @@ export class ExtensionController {
       const config = this.getAnalysisConfig(rootPath);
 
       // Phase 1: Build grounding layer (Requirements: 2.1)
-      const progressCallback: ProgressCallback = (percentage, message) => {
+      const progressCallback: ProgressCallback = (_percentage, _message) => {
         // Progress tracking
       };
 
@@ -497,6 +500,14 @@ export class ExtensionController {
    */
   async exportDiagram(format: 'png' | 'svg'): Promise<void> {
     try {
+      if (!this.normalizeExportFormat(format)) {
+        throw new RenderError(
+          'Invalid export format',
+          'Supported formats are png and svg',
+          RenderErrorType.InvalidData
+        );
+      }
+
       if (!this.webviewManager.isActive()) {
         throw new RenderError(
           'No diagram to export',
@@ -526,7 +537,9 @@ export class ExtensionController {
    * Requirements: 3.1, 6.5, 11.1
    */
   private setupWebviewMessageHandling(): void {
-    this.webviewManager.onMessage((message: WebviewMessage) => {
+    // Ensure only one active subscription from controller to webview messages
+    this.webviewMessageSubscription?.dispose();
+    this.webviewMessageSubscription = this.webviewManager.onMessage((message: WebviewMessage) => {
       switch (message.type) {
         case 'elementSelected':
           this.handleElementSelected(message.elementId);
@@ -537,14 +550,29 @@ export class ExtensionController {
         case 'abstractionLevelChanged':
           this.handleAbstractionLevelChanged(message.level);
           break;
-        case 'exportRequested':
-          this.exportDiagram(message.format);
+        case 'exportRequested': {
+          const exportFormat = this.normalizeExportFormat(message.format);
+          if (!exportFormat) {
+            vscode.window.showErrorMessage('Invalid export format. Use "png" or "svg".');
+            break;
+          }
+          void this.exportDiagram(exportFormat);
           break;
+        }
         case 'refreshRequested':
-          this.refreshDiagram();
+          void this.refreshDiagram();
           break;
       }
     });
+  }
+
+  private normalizeExportFormat(format: unknown): 'png' | 'svg' | null {
+    if (typeof format !== 'string') {
+      return null;
+    }
+
+    const normalized = format.trim().toLowerCase();
+    return normalized === 'png' || normalized === 'svg' ? normalized : null;
   }
 
   /**
@@ -559,7 +587,7 @@ export class ExtensionController {
    * Handle element hover
    * Requirements: 3.4
    */
-  private handleElementHovered(elementId: string): void {
+  private handleElementHovered(_elementId: string): void {
     // TODO: Show tooltip with element information
   }
 

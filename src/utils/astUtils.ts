@@ -1,5 +1,13 @@
 import Parser from 'tree-sitter';
 
+interface NodeLocator {
+  type: string;
+  startPosition: {
+    row: number;
+    column: number;
+  };
+}
+
 /**
  * Find a specific node in a Tree-sitter syntax tree by matching type and position.
  * 
@@ -7,7 +15,7 @@ import Parser from 'tree-sitter';
  * @param target - The target node with type and position to match
  * @returns The matching node or null if not found
  */
-export function findNodeInTree(root: Parser.SyntaxNode, target: any): Parser.SyntaxNode | null {
+export function findNodeInTree(root: Parser.SyntaxNode, target: NodeLocator): Parser.SyntaxNode | null {
   // Find the actual Tree-sitter node corresponding to an ExtractedNode
   const traverse = (node: Parser.SyntaxNode): Parser.SyntaxNode | null => {
     if (

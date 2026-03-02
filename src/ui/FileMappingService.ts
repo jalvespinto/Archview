@@ -3,7 +3,7 @@
  * Requirements: 3.2, 3.3
  */
 
-import { DiagramData, DiagramNode } from '../types';
+import { DiagramData } from '../types';
 
 /**
  * FileMappingService maintains the mapping between diagram elements and their source files

@@ -163,7 +163,7 @@ export class AbstractionFilter {
     let groupIndex = 0;
     const groupSpacing = 200;
 
-    for (const [language, nodes] of nodesByLanguage.entries()) {
+    for (const [, nodes] of nodesByLanguage.entries()) {
       const baseX = groupIndex * groupSpacing;
       
       nodes.forEach((node, index) => {

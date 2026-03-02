@@ -13,6 +13,8 @@ import TypeScript from 'tree-sitter-typescript';
 import Java from 'tree-sitter-java';
 import Go from 'tree-sitter-go';
 
+type TreeSitterLanguage = Parameters<Parser['setLanguage']>[0];
+
 /**
  * Represents a parsed Abstract Syntax Tree
  */
@@ -377,9 +379,9 @@ export class ParserManager {
   /**
    * Get default language grammar for fallback cases
    * Uses TypeScript as the default since it's widely used
-   * @returns Language grammar object (typed as any because tree-sitter doesn't export Language type)
+   * @returns Language grammar object for fallback parser creation
    */
-  private getDefaultLanguage(): any {
+  private getDefaultLanguage(): TreeSitterLanguage {
     return TypeScript.typescript;
   }
 
@@ -395,7 +397,7 @@ export class ParserManager {
   /**
    * Map a Language enum to its Tree-sitter grammar
    */
-  private getLanguageGrammar(language: Language): any {
+  private getLanguageGrammar(language: Language): TreeSitterLanguage {
     switch (language) {
       case Language.Python:
         return Python;
@@ -457,7 +459,7 @@ export class ParserManager {
       case Language.TypeScript:
         addMatches(/\bfunction\s+\w+[^\n]*\n?/g, 'function_declaration');
         addMatches(/\bclass\s+\w+[^\n]*\n?/g, 'class_declaration');
-        addMatches(/\bconst\s+\w+\s*=\s*\([^\)]*\)\s*=>[^\n]*\n?/g, 'arrow_function');
+        addMatches(/\bconst\s+\w+\s*=\s*\([^)]*\)\s*=>[^\n]*\n?/g, 'arrow_function');
         if (language === Language.TypeScript) {
           addMatches(/\binterface\s+\w+[^\n]*\n?/g, 'interface_declaration');
         }
@@ -521,13 +523,8 @@ export class ParserManager {
    * Dispose of all parsers and free resources
    */
   dispose(): void {
-    // Delete all parser instances to free native resources
-    // Tree-sitter parsers have a delete() method but it's not in the TypeScript types
-    for (const parser of this.parsers.values()) {
-      if (typeof (parser as any).delete === 'function') {
-        (parser as any).delete();
-      }
-    }
+    // Clearing references is sufficient for extension lifecycle and avoids
+    // native parser invalidation across long-running test processes.
     this.parsers.clear();
     this.initialized = false;
   }

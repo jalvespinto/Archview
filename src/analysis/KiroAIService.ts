@@ -51,7 +51,7 @@ interface LLMArchitectureResponse {
  * Kiro AI API interface
  */
 interface KiroAI {
-  sendMessage(prompt: string, options?: any): Promise<string>;
+  sendMessage(prompt: string, options?: unknown): Promise<string>;
 }
 
 /**
@@ -61,6 +61,10 @@ interface KiroAIResult {
   api: KiroAI;
   isMock: boolean;
 }
+
+type FileGroundingDataWithExcerpt = FileGroundingData & { contentExcerpt?: string };
+type KiroImport = { ai?: KiroAI };
+type GlobalWithKiro = typeof globalThis & { kiro?: { ai?: KiroAI } };
 
 export class KiroAIService {
   private kiroAI: KiroAI | null = null;
@@ -242,8 +246,6 @@ export class KiroAIService {
     await parserManager.initialize();
 
     const fs = await import('fs/promises');
-    const path = await import('path');
-
     for (const file of files) {
       try {
         // Read file content
@@ -306,7 +308,7 @@ export class KiroAIService {
         const excerpt = lines.join('\n');
 
         // Add excerpt to file data (extend the interface)
-        (file as any).contentExcerpt = excerpt;
+        (file as FileGroundingDataWithExcerpt).contentExcerpt = excerpt;
       } catch (error) {
         console.warn(`Failed to enrich file ${file.path} to Tier 3:`, error);
         // Continue with other files
@@ -324,8 +326,8 @@ export class KiroAIService {
    */
   private async extractFunctionSignature(
     functionName: string,
-    ast: any,
-    sourceCode: string
+    _ast: unknown,
+    _sourceCode: string
   ): Promise<string> {
     try {
       // This is a simplified implementation
@@ -348,9 +350,9 @@ export class KiroAIService {
    * @returns Array of method names
    */
   private async extractClassMethods(
-    className: string,
-    ast: any,
-    sourceCode: string
+    _className: string,
+    _ast: unknown,
+    _sourceCode: string
   ): Promise<string[]> {
     try {
       // This is a simplified implementation
@@ -443,7 +445,7 @@ Focus on:
 
       // Add content excerpts for files that have them
       for (const file of grounding.files) {
-        const excerpt = (file as any).contentExcerpt;
+        const excerpt = (file as FileGroundingDataWithExcerpt).contentExcerpt;
         if (excerpt) {
           prompt += `\nFile: ${file.path}\n`;
           prompt += '```\n';
@@ -779,19 +781,18 @@ Focus on:
     // Pattern 1: Try importing kiro module
     try {
       const kiro = await import('kiro');
-      if (kiro && (kiro as any).ai) {
-        return { api: (kiro as any).ai, isMock: false };
+      const typedKiro = kiro as KiroImport;
+      if (typedKiro.ai) {
+        return { api: typedKiro.ai, isMock: false };
       }
     } catch (error) {
       // Import failed, try other methods
     }
 
     // Pattern 2: Check for global kiro object
-    if (typeof (global as any).kiro !== 'undefined') {
-      const kiro = (global as any).kiro;
-      if (kiro && kiro.ai) {
-        return { api: kiro.ai, isMock: false };
-      }
+    const globalKiro = (globalThis as GlobalWithKiro).kiro;
+    if (globalKiro?.ai) {
+      return { api: globalKiro.ai, isMock: false };
     }
 
     // Pattern 3: Fall back to mock for testing

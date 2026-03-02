@@ -15,7 +15,6 @@ import {
   AbstractionLevel,
   ComponentType,
   Language,
-  RelationshipType,
 } from '../types';
 import { StyleManager } from './StyleManager';
 
@@ -223,11 +222,18 @@ export class DiagramGenerator {
     timeoutMs: number,
     errorMessage: string
   ): Promise<T> {
-    return Promise.race([
-      promise,
-      new Promise<T>((_, reject) =>
-        setTimeout(() => reject(new Error(errorMessage)), timeoutMs)
-      ),
-    ]);
+    let timeoutHandle: NodeJS.Timeout | undefined;
+
+    const timeoutPromise = new Promise<T>((_, reject) => {
+      timeoutHandle = setTimeout(() => reject(new Error(errorMessage)), timeoutMs);
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timeoutHandle) {
+        clearTimeout(timeoutHandle);
+      }
+    }
   }
 }

@@ -13,12 +13,11 @@ import Parser from 'tree-sitter';
 import {
   Relationship,
   RelationshipType,
-  RelationshipMetadata,
   Language,
   Component,
   ComponentType
 } from '../types';
-import { ParsedAST, ParserManager } from './ParserManager';
+import { ParsedAST, ParserManager, ExtractedNode } from './ParserManager';
 import { findNodeInTree } from '../utils/astUtils';
 
 /**
@@ -77,233 +76,40 @@ export class RelationshipExtractor {
    * Extract relationships from Python AST
    * Extracts: imports, inheritance, function calls
    */
-  /**
-     * Extract relationships from Python AST
-     * Extracts: imports, inheritance, function calls
-     */
-    /**
-       * Extract relationships from Python AST
-       * Extracts: imports, inheritance, function calls
-       */
-      private extractPythonRelationships(context: RelationshipExtractionContext): Relationship[] {
-        const { ast, components, parserManager } = context;
-        const rawRelationships: RawRelationship[] = [];
-        const rootNode = ast.tree.rootNode;
+  private extractPythonRelationships(context: RelationshipExtractionContext): Relationship[] {
+    const { ast, components, parserManager } = context;
+    const rawRelationships: RawRelationship[] = [];
+    const rootNode = ast.tree.rootNode;
+    const callNodes = parserManager.extractNodesByType(ast, {
+      nodeTypes: ['call']
+    });
 
-        // Extract import relationships
-        const importNodes = parserManager.extractNodesByType(ast, {
-          nodeTypes: ['import_statement', 'import_from_statement']
-        });
+    this.collectPythonImportRelationships(ast, components, parserManager, rootNode, rawRelationships);
+    this.collectPythonInheritanceRelationships(ast, components, parserManager, rootNode, rawRelationships);
+    this.collectPythonFunctionCallRelationships(ast, components, rootNode, callNodes, rawRelationships);
 
-        for (const importNode of importNodes) {
-          const imports = this.extractPythonImports(importNode, ast.sourceCode);
-          const treeNode = findNodeInTree(rootNode, importNode);
-          const sourceComponentId = treeNode ? this.findContainingComponent(treeNode, components, ast.filePath) : undefined;
-          for (const imp of imports) {
-            rawRelationships.push({
-              sourceFile: ast.filePath,
-              sourceComponentId,
-              targetIdentifier: imp,
-              type: RelationshipType.Import,
-              occurrences: 1
-            });
-          }
-        }
-
-        // Extract inheritance relationships
-        const classNodes = parserManager.extractNodesByType(ast, {
-          nodeTypes: ['class_definition']
-        });
-
-        for (const classNode of classNodes) {
-          const treeNode = findNodeInTree(rootNode, classNode);
-          if (treeNode) {
-            const baseClasses = this.extractPythonBaseClasses(treeNode, ast.sourceCode);
-            // The source component is the class itself
-            const sourceComponentId = this.findContainingComponent(treeNode, components, ast.filePath);
-            for (const baseClass of baseClasses) {
-              rawRelationships.push({
-                sourceFile: ast.filePath,
-                sourceComponentId,
-                targetIdentifier: baseClass,
-                type: RelationshipType.Inheritance,
-                occurrences: 1
-              });
-            }
-          }
-        }
-
-        // Extract function call relationships
-        const callNodes = parserManager.extractNodesByType(ast, {
-          nodeTypes: ['call']
-        });
-
-        // Track calls per source component
-        const callsBySource = new Map<string, Map<string, number>>();
-
-        for (const callNode of callNodes) {
-          const treeNode = findNodeInTree(rootNode, callNode);
-          if (treeNode) {
-            const functionName = this.extractPythonFunctionCall(callNode, ast.sourceCode);
-            if (functionName) {
-              // Find which component contains this call
-              const sourceComponentId = this.findContainingComponent(treeNode, components, ast.filePath);
-              if (sourceComponentId) {
-                if (!callsBySource.has(sourceComponentId)) {
-                  callsBySource.set(sourceComponentId, new Map());
-                }
-                const calls = callsBySource.get(sourceComponentId)!;
-                calls.set(functionName, (calls.get(functionName) || 0) + 1);
-              }
-            }
-          }
-        }
-
-        // Create raw relationships from aggregated calls
-        for (const [sourceComponentId, calls] of callsBySource.entries()) {
-          for (const [functionName, count] of calls.entries()) {
-            rawRelationships.push({
-              sourceFile: ast.filePath,
-              sourceComponentId,
-              targetIdentifier: functionName,
-              type: RelationshipType.FunctionCall,
-              occurrences: count
-            });
-          }
-        }
-
-        // Map raw relationships to components
-        return this.mapRelationshipsToComponents(rawRelationships, components);
-      }
+    return this.mapRelationshipsToComponents(rawRelationships, components);
+  }
 
   /**
    * Extract relationships from JavaScript/TypeScript AST
    * Extracts: imports, inheritance, function calls
    */
-  /**
-     * Extract relationships from JavaScript/TypeScript AST
-     * Extracts: imports, inheritance, function calls
-     */
-    private extractJavaScriptRelationships(context: RelationshipExtractionContext): Relationship[] {
-      const { ast, components, parserManager } = context;
-      const rawRelationships: RawRelationship[] = [];
-      const rootNode = ast.tree.rootNode;
+  private extractJavaScriptRelationships(context: RelationshipExtractionContext): Relationship[] {
+    const { ast, components, parserManager } = context;
+    const rawRelationships: RawRelationship[] = [];
+    const rootNode = ast.tree.rootNode;
+    const callNodes = parserManager.extractNodesByType(ast, {
+      nodeTypes: ['call_expression', 'ERROR']
+    });
 
-      // Extract import relationships (ES6 imports and require)
-      const importNodes = parserManager.extractNodesByType(ast, {
-        nodeTypes: ['import_statement']
-      });
+    this.collectJSImportRelationships(ast, components, parserManager, rootNode, rawRelationships);
+    this.collectJSRequireRelationships(ast, components, rootNode, callNodes, rawRelationships);
+    this.collectJSInheritanceRelationships(ast, components, parserManager, rootNode, rawRelationships);
+    this.collectJSFunctionCallRelationships(ast, components, rootNode, callNodes, rawRelationships);
 
-      for (const importNode of importNodes) {
-        const imports = this.extractJSImports(importNode, ast.sourceCode);
-        const treeNode = findNodeInTree(rootNode, importNode);
-        const sourceComponentId = treeNode ? this.findContainingComponent(treeNode, components, ast.filePath) : undefined;
-        for (const imp of imports) {
-          rawRelationships.push({
-            sourceFile: ast.filePath,
-            sourceComponentId,
-            targetIdentifier: imp,
-            type: RelationshipType.Import,
-            occurrences: 1
-          });
-        }
-      }
-
-      // Extract require() calls
-      const callNodes = parserManager.extractNodesByType(ast, {
-        nodeTypes: ['call_expression', 'ERROR']
-      });
-
-      for (const callNode of callNodes) {
-        const treeNode = findNodeInTree(rootNode, callNode);
-        if (treeNode) {
-          const requirePath = this.extractJSRequire(treeNode, ast.sourceCode);
-          if (requirePath) {
-            const sourceComponentId = this.findContainingComponent(treeNode, components, ast.filePath);
-            rawRelationships.push({
-              sourceFile: ast.filePath,
-              sourceComponentId,
-              targetIdentifier: requirePath,
-              type: RelationshipType.Import,
-              occurrences: 1
-            });
-          }
-        }
-      }
-
-      // Extract inheritance relationships (extends, implements)
-      const classNodes = parserManager.extractNodesByType(ast, {
-        nodeTypes: ['class_declaration', 'class']
-      });
-
-      for (const classNode of classNodes) {
-        const treeNode = findNodeInTree(rootNode, classNode);
-        if (treeNode) {
-          const sourceComponentId = this.findContainingComponent(treeNode, components, ast.filePath);
-          const extendsClass = this.extractJSExtends(treeNode, ast.sourceCode);
-          if (extendsClass) {
-            rawRelationships.push({
-              sourceFile: ast.filePath,
-              sourceComponentId,
-              targetIdentifier: extendsClass,
-              type: RelationshipType.Inheritance,
-              occurrences: 1
-            });
-          }
-
-          // TypeScript implements
-          if (ast.language === Language.TypeScript) {
-            const implementsInterfaces = this.extractTSImplements(treeNode, ast.sourceCode);
-            for (const iface of implementsInterfaces) {
-              rawRelationships.push({
-                sourceFile: ast.filePath,
-                sourceComponentId,
-                targetIdentifier: iface,
-                type: RelationshipType.Inheritance,
-                occurrences: 1
-              });
-            }
-          }
-        }
-      }
-
-      // Extract function call relationships
-      // Track calls per source component
-      const callsBySource = new Map<string, Map<string, number>>();
-
-      for (const callNode of callNodes) {
-        const treeNode = findNodeInTree(rootNode, callNode);
-        if (treeNode) {
-          const functionName = this.extractJSFunctionCall(treeNode, ast.sourceCode);
-          if (functionName) {
-            // Find which component contains this call
-            const sourceComponentId = this.findContainingComponent(treeNode, components, ast.filePath);
-            if (sourceComponentId) {
-              if (!callsBySource.has(sourceComponentId)) {
-                callsBySource.set(sourceComponentId, new Map());
-              }
-              const calls = callsBySource.get(sourceComponentId)!;
-              calls.set(functionName, (calls.get(functionName) || 0) + 1);
-            }
-          }
-        }
-      }
-
-      // Create raw relationships from aggregated calls
-      for (const [sourceComponentId, calls] of callsBySource.entries()) {
-        for (const [functionName, count] of calls.entries()) {
-          rawRelationships.push({
-            sourceFile: ast.filePath,
-            sourceComponentId,
-            targetIdentifier: functionName,
-            type: RelationshipType.FunctionCall,
-            occurrences: count
-          });
-        }
-      }
-
-      return this.mapRelationshipsToComponents(rawRelationships, components);
-    }
+    return this.mapRelationshipsToComponents(rawRelationships, components);
+  }
 
   /**
    * Extract relationships from Java AST
@@ -443,11 +249,119 @@ export class RelationshipExtractor {
     return this.mapRelationshipsToComponents(rawRelationships, components);
   }
 
+  private collectPythonImportRelationships(
+    ast: ParsedAST,
+    components: Component[],
+    parserManager: ParserManager,
+    rootNode: Parser.SyntaxNode,
+    rawRelationships: RawRelationship[]
+  ): void {
+    const importNodes = parserManager.extractNodesByType(ast, {
+      nodeTypes: ['import_statement', 'import_from_statement']
+    });
+
+    for (const importNode of importNodes) {
+      const imports = this.extractPythonImports(importNode, ast.sourceCode);
+      const treeNode = findNodeInTree(rootNode, importNode);
+      const sourceComponentId = treeNode
+        ? this.findContainingComponent(treeNode, components, ast.filePath)
+        : undefined;
+      for (const importPath of imports) {
+        this.addRawRelationship(
+          rawRelationships,
+          ast.filePath,
+          sourceComponentId,
+          importPath,
+          RelationshipType.Import,
+          1
+        );
+      }
+    }
+  }
+
+  private collectPythonInheritanceRelationships(
+    ast: ParsedAST,
+    components: Component[],
+    parserManager: ParserManager,
+    rootNode: Parser.SyntaxNode,
+    rawRelationships: RawRelationship[]
+  ): void {
+    const classNodes = parserManager.extractNodesByType(ast, {
+      nodeTypes: ['class_definition']
+    });
+
+    for (const classNode of classNodes) {
+      const treeNode = findNodeInTree(rootNode, classNode);
+      if (!treeNode) {
+        continue;
+      }
+
+      const sourceComponentId = this.findContainingComponent(treeNode, components, ast.filePath);
+      const baseClasses = this.extractPythonBaseClasses(treeNode, ast.sourceCode);
+      for (const baseClass of baseClasses) {
+        this.addRawRelationship(
+          rawRelationships,
+          ast.filePath,
+          sourceComponentId,
+          baseClass,
+          RelationshipType.Inheritance,
+          1
+        );
+      }
+    }
+  }
+
+  private collectPythonFunctionCallRelationships(
+    ast: ParsedAST,
+    components: Component[],
+    rootNode: Parser.SyntaxNode,
+    callNodes: ExtractedNode[],
+    rawRelationships: RawRelationship[]
+  ): void {
+    const callsBySource = new Map<string, Map<string, number>>();
+
+    for (const callNode of callNodes) {
+      const treeNode = findNodeInTree(rootNode, callNode);
+      if (!treeNode) {
+        continue;
+      }
+
+      const functionName = this.extractPythonFunctionCall(callNode, ast.sourceCode);
+      if (!functionName) {
+        continue;
+      }
+
+      const sourceComponentId = this.findContainingComponent(treeNode, components, ast.filePath);
+      if (!sourceComponentId) {
+        continue;
+      }
+
+      if (!callsBySource.has(sourceComponentId)) {
+        callsBySource.set(sourceComponentId, new Map());
+      }
+      const calls = callsBySource.get(sourceComponentId)!;
+      calls.set(functionName, (calls.get(functionName) || 0) + 1);
+    }
+
+    for (const [sourceComponentId, calls] of callsBySource.entries()) {
+      for (const [functionName, count] of calls.entries()) {
+        this.addRawRelationship(
+          rawRelationships,
+          ast.filePath,
+          sourceComponentId,
+          functionName,
+          RelationshipType.FunctionCall,
+          count
+        );
+      }
+    }
+  }
+
   // ============================================================================
   // Python Extraction Helpers
   // ============================================================================
 
-  private extractPythonImports(node: any, sourceCode: string): string[] {
+  private extractPythonImports(node: ExtractedNode, _sourceCode: string): string[] {
     const imports: string[] = [];
 
     // import_statement: import module1, module2
@@ -477,7 +391,7 @@ export class RelationshipExtractor {
     return imports;
   }
 
-  private extractPythonModuleName(node: any): string | null {
+  private extractPythonModuleName(node: ExtractedNode): string | null {
     if (node.type === 'dotted_name') {
       return node.text;
     } else if (node.type === 'aliased_import') {
@@ -491,7 +405,7 @@ export class RelationshipExtractor {
     return null;
   }
 
-  private extractPythonBaseClasses(node: Parser.SyntaxNode, sourceCode: string): string[] {
+  private extractPythonBaseClasses(node: Parser.SyntaxNode, _sourceCode: string): string[] {
     const baseClasses: string[] = [];
 
     // Look for argument_list in class_definition
@@ -511,7 +425,7 @@ export class RelationshipExtractor {
     return baseClasses;
   }
 
-  private extractPythonFunctionCall(node: any, sourceCode: string): string | null {
+  private extractPythonFunctionCall(node: ExtractedNode, _sourceCode: string): string | null {
     // call node has a 'function' field
     for (const child of node.children || []) {
       if (child.type === 'identifier' || child.type === 'attribute') {
@@ -525,7 +439,178 @@ export class RelationshipExtractor {
   // JavaScript/TypeScript Extraction Helpers
   // ============================================================================
 
-  private extractJSImports(node: any, sourceCode: string): string[] {
+  private collectJSImportRelationships(
+    ast: ParsedAST,
+    components: Component[],
+    parserManager: ParserManager,
+    rootNode: Parser.SyntaxNode,
+    rawRelationships: RawRelationship[]
+  ): void {
+    const importNodes = parserManager.extractNodesByType(ast, {
+      nodeTypes: ['import_statement']
+    });
+
+    for (const importNode of importNodes) {
+      const imports = this.extractJSImports(importNode, ast.sourceCode);
+      const treeNode = findNodeInTree(rootNode, importNode);
+      const sourceComponentId = treeNode
+        ? this.findContainingComponent(treeNode, components, ast.filePath)
+        : undefined;
+      for (const importPath of imports) {
+        this.addRawRelationship(
+          rawRelationships,
+          ast.filePath,
+          sourceComponentId,
+          importPath,
+          RelationshipType.Import,
+          1
+        );
+      }
+    }
+  }
+
+  private collectJSRequireRelationships(
+    ast: ParsedAST,
+    components: Component[],
+    rootNode: Parser.SyntaxNode,
+    callNodes: ExtractedNode[],
+    rawRelationships: RawRelationship[]
+  ): void {
+    for (const callNode of callNodes) {
+      const treeNode = findNodeInTree(rootNode, callNode);
+      if (!treeNode) {
+        continue;
+      }
+
+      const requirePath = this.extractJSRequire(treeNode, ast.sourceCode);
+      if (!requirePath) {
+        continue;
+      }
+
+      const sourceComponentId = this.findContainingComponent(treeNode, components, ast.filePath);
+      this.addRawRelationship(
+        rawRelationships,
+        ast.filePath,
+        sourceComponentId,
+        requirePath,
+        RelationshipType.Import,
+        1
+      );
+    }
+  }
+
+  private collectJSInheritanceRelationships(
+    ast: ParsedAST,
+    components: Component[],
+    parserManager: ParserManager,
+    rootNode: Parser.SyntaxNode,
+    rawRelationships: RawRelationship[]
+  ): void {
+    const classNodes = parserManager.extractNodesByType(ast, {
+      nodeTypes: ['class_declaration', 'class']
+    });
+
+    for (const classNode of classNodes) {
+      const treeNode = findNodeInTree(rootNode, classNode);
+      if (!treeNode) {
+        continue;
+      }
+
+      const sourceComponentId = this.findContainingComponent(treeNode, components, ast.filePath);
+      const extendsClass = this.extractJSExtends(treeNode, ast.sourceCode);
+      if (extendsClass) {
+        this.addRawRelationship(
+          rawRelationships,
+          ast.filePath,
+          sourceComponentId,
+          extendsClass,
+          RelationshipType.Inheritance,
+          1
+        );
+      }
+
+      if (ast.language !== Language.TypeScript) {
+        continue;
+      }
+
+      const implementsInterfaces = this.extractTSImplements(treeNode, ast.sourceCode);
+      for (const iface of implementsInterfaces) {
+        this.addRawRelationship(
+          rawRelationships,
+          ast.filePath,
+          sourceComponentId,
+          iface,
+          RelationshipType.Inheritance,
+          1
+        );
+      }
+    }
+  }
+
+  private collectJSFunctionCallRelationships(
+    ast: ParsedAST,
+    components: Component[],
+    rootNode: Parser.SyntaxNode,
+    callNodes: ExtractedNode[],
+    rawRelationships: RawRelationship[]
+  ): void {
+    const callsBySource = new Map<string, Map<string, number>>();
+
+    for (const callNode of callNodes) {
+      const treeNode = findNodeInTree(rootNode, callNode);
+      if (!treeNode) {
+        continue;
+      }
+
+      const functionName = this.extractJSFunctionCall(treeNode, ast.sourceCode);
+      if (!functionName) {
+        continue;
+      }
+
+      const sourceComponentId = this.findContainingComponent(treeNode, components, ast.filePath);
+      if (!sourceComponentId) {
+        continue;
+      }
+
+      if (!callsBySource.has(sourceComponentId)) {
+        callsBySource.set(sourceComponentId, new Map());
+      }
+      const calls = callsBySource.get(sourceComponentId)!;
+      calls.set(functionName, (calls.get(functionName) || 0) + 1);
+    }
+
+    for (const [sourceComponentId, calls] of callsBySource.entries()) {
+      for (const [functionName, count] of calls.entries()) {
+        this.addRawRelationship(
+          rawRelationships,
+          ast.filePath,
+          sourceComponentId,
+          functionName,
+          RelationshipType.FunctionCall,
+          count
+        );
+      }
+    }
+  }
+
+  private addRawRelationship(
+    rawRelationships: RawRelationship[],
+    sourceFile: string,
+    sourceComponentId: string | undefined,
+    targetIdentifier: string,
+    type: RelationshipType,
+    occurrences: number
+  ): void {
+    rawRelationships.push({
+      sourceFile,
+      sourceComponentId,
+      targetIdentifier,
+      type,
+      occurrences
+    });
+  }
+
+  private extractJSImports(node: ExtractedNode, _sourceCode: string): string[] {
     const imports: string[] = [];
 
     // import_statement has a 'source' field (string)
@@ -540,7 +625,7 @@ export class RelationshipExtractor {
     return imports;
   }
 
-  private extractJSRequire(node: Parser.SyntaxNode, sourceCode: string): string | null {
+  private extractJSRequire(node: Parser.SyntaxNode, _sourceCode: string): string | null {
     // Check if this is a require() call
     const functionNode = node.childForFieldName('function');
     if (functionNode && functionNode.text === 'require') {
@@ -556,7 +641,7 @@ export class RelationshipExtractor {
     return null;
   }
 
-  private extractJSExtends(node: Parser.SyntaxNode, sourceCode: string): string | null {
+  private extractJSExtends(node: Parser.SyntaxNode, _sourceCode: string): string | null {
     // Look for class_heritage
     for (let i = 0; i < node.childCount; i++) {
       const child = node.child(i);
@@ -573,7 +658,7 @@ export class RelationshipExtractor {
     return null;
   }
 
-  private extractTSImplements(node: Parser.SyntaxNode, sourceCode: string): string[] {
+  private extractTSImplements(node: Parser.SyntaxNode, _sourceCode: string): string[] {
     const interfaces: string[] = [];
 
     // Look for implements clause
@@ -597,7 +682,7 @@ export class RelationshipExtractor {
     return interfaces;
   }
 
-  private extractJSFunctionCall(node: Parser.SyntaxNode, sourceCode: string): string | null {
+  private extractJSFunctionCall(node: Parser.SyntaxNode, _sourceCode: string): string | null {
     // call_expression has a 'function' field
     if (node.type === 'call_expression') {
       const functionNode = node.childForFieldName('function');
@@ -652,7 +737,7 @@ export class RelationshipExtractor {
   // Java Extraction Helpers
   // ============================================================================
 
-  private extractJavaImport(node: any, sourceCode: string): string | null {
+  private extractJavaImport(node: ExtractedNode, _sourceCode: string): string | null {
     // import_declaration contains scoped_identifier or identifier
     for (const child of node.children || []) {
       if (child.type === 'scoped_identifier' || child.type === 'identifier') {
@@ -662,7 +747,7 @@ export class RelationshipExtractor {
     return null;
   }
 
-  private extractJavaExtends(node: Parser.SyntaxNode, sourceCode: string): string | null {
+  private extractJavaExtends(node: Parser.SyntaxNode, _sourceCode: string): string | null {
     // Look for superclass field
     const superclassNode = node.childForFieldName('superclass');
     if (superclassNode) {
@@ -671,7 +756,7 @@ export class RelationshipExtractor {
     return null;
   }
 
-  private extractJavaImplements(node: Parser.SyntaxNode, sourceCode: string): string[] {
+  private extractJavaImplements(node: Parser.SyntaxNode, _sourceCode: string): string[] {
     const interfaces: string[] = [];
 
     // Look for interfaces field
@@ -689,7 +774,7 @@ export class RelationshipExtractor {
     return interfaces;
   }
 
-  private extractJavaMethodCall(node: Parser.SyntaxNode, sourceCode: string): string | null {
+  private extractJavaMethodCall(node: Parser.SyntaxNode, _sourceCode: string): string | null {
     // method_invocation has a 'name' field
     const nameNode = node.childForFieldName('name');
     if (nameNode) {
@@ -702,7 +787,7 @@ export class RelationshipExtractor {
   // Go Extraction Helpers
   // ============================================================================
 
-  private extractGoImports(node: any, sourceCode: string): string[] {
+  private extractGoImports(node: ExtractedNode, _sourceCode: string): string[] {
     const imports: string[] = [];
 
     // import_declaration can have import_spec or import_spec_list
@@ -727,7 +812,7 @@ export class RelationshipExtractor {
     return imports;
   }
 
-  private extractGoImportSpec(node: any): string | null {
+  private extractGoImportSpec(node: ExtractedNode): string | null {
     // import_spec contains interpreted_string_literal
     for (const child of node.children || []) {
       if (child.type === 'interpreted_string_literal' || child.type === 'raw_string_literal') {
@@ -737,7 +822,7 @@ export class RelationshipExtractor {
     return null;
   }
 
-  private extractGoFunctionCall(node: Parser.SyntaxNode, sourceCode: string): string | null {
+  private extractGoFunctionCall(node: Parser.SyntaxNode, _sourceCode: string): string | null {
     // call_expression has a 'function' field
     const functionNode = node.childForFieldName('function');
     if (functionNode) {
@@ -764,104 +849,112 @@ export class RelationshipExtractor {
    * Resolves target identifiers to component IDs
    */
   private mapRelationshipsToComponents(
-      rawRelationships: RawRelationship[],
-      components: Component[]
-    ): Relationship[] {
-      const relationships: Relationship[] = [];
-      const relationshipMap = new Map<string, Relationship>();
+    rawRelationships: RawRelationship[],
+    components: Component[]
+  ): Relationship[] {
+    const relationshipMap = new Map<string, Relationship>();
+    const fileToComponents = this.buildFileToComponentsMap(components);
 
-      // Build a map from file path to ALL components in that file
-      const fileToComponents = new Map<string, Component[]>();
-      for (const component of components) {
-        for (const filePath of component.filePaths) {
-          if (!fileToComponents.has(filePath)) {
-            fileToComponents.set(filePath, []);
-          }
-          fileToComponents.get(filePath)!.push(component);
-        }
+    for (const raw of rawRelationships) {
+      const sourceComponent = this.resolveSourceComponent(raw, components, fileToComponents);
+      if (!sourceComponent) {
+        continue;
       }
 
-      for (const raw of rawRelationships) {
-        // Determine source component
-        let sourceComponent: Component | undefined;
-
-        if (raw.sourceComponentId) {
-          // If source component ID is explicitly provided, use it
-          sourceComponent = components.find(c => c.id === raw.sourceComponentId);
-        } else {
-          // Otherwise, find source component from file
-          const sourceComponents = fileToComponents.get(raw.sourceFile);
-          if (!sourceComponents || sourceComponents.length === 0) {
-            continue;
-          }
-
-          // If there's only one component in the file, use it
-          if (sourceComponents.length === 1) {
-            sourceComponent = sourceComponents[0];
-          } else if (raw.nodeStartPosition !== undefined) {
-            // If we have node position, find the component that contains this position
-            // For now, use a simple heuristic: find the most specific (deepest) component
-            // that could contain this relationship
-            sourceComponent = sourceComponents.find(c => 
-              c.type !== ComponentType.Module && c.parent !== null
-            ) || sourceComponents[0];
-          } else {
-            // Default to the module component (top-level)
-            sourceComponent = sourceComponents.find(c => c.type === ComponentType.Module) || sourceComponents[0];
-          }
-        }
-
-        if (!sourceComponent) {
-          continue;
-        }
-
-        // Find target component by matching identifier
-        const targetComponent = this.findComponentByIdentifier(raw.targetIdentifier, components);
-        if (!targetComponent || targetComponent.id === sourceComponent.id) {
-          continue; // Skip if target not found or self-reference
-        }
-
-        // Create or update relationship
-        const key = `${sourceComponent.id}-${targetComponent.id}-${raw.type}`;
-        const existing = relationshipMap.get(key);
-
-        if (existing) {
-          // Update occurrence count
-          existing.metadata.occurrences += raw.occurrences;
-        } else {
-          // Create new relationship
-          const relationship: Relationship = {
-            id: this.generateRelationshipId(),
-            source: sourceComponent.id,
-            target: targetComponent.id,
-            type: raw.type,
-            strength: 0, // Will be calculated later
-            metadata: {
-              occurrences: raw.occurrences,
-              bidirectional: false
-            }
-          };
-          relationshipMap.set(key, relationship);
-        }
+      const targetComponent = this.findComponentByIdentifier(raw.targetIdentifier, components);
+      if (!targetComponent || targetComponent.id === sourceComponent.id) {
+        continue;
       }
 
-      // Calculate relationship strength and check for bidirectional
-      for (const [key, relationship] of relationshipMap.entries()) {
-        // Calculate strength (0-1) based on occurrences
-        // Use logarithmic scale to handle large occurrence counts
-        relationship.strength = Math.min(1.0, Math.log10(relationship.metadata.occurrences + 1) / 2);
-
-        // Check if bidirectional
-        const reverseKey = `${relationship.target}-${relationship.source}-${relationship.type}`;
-        if (relationshipMap.has(reverseKey)) {
-          relationship.metadata.bidirectional = true;
-        }
-
-        relationships.push(relationship);
-      }
-
-      return relationships;
+      this.upsertRelationship(relationshipMap, sourceComponent, targetComponent, raw);
     }
+
+    return this.finalizeRelationshipMap(relationshipMap);
+  }
+
+  private buildFileToComponentsMap(components: Component[]): Map<string, Component[]> {
+    const fileToComponents = new Map<string, Component[]>();
+    for (const component of components) {
+      for (const filePath of component.filePaths) {
+        if (!fileToComponents.has(filePath)) {
+          fileToComponents.set(filePath, []);
+        }
+        fileToComponents.get(filePath)!.push(component);
+      }
+    }
+    return fileToComponents;
+  }
+
+  private resolveSourceComponent(
+    raw: RawRelationship,
+    components: Component[],
+    fileToComponents: Map<string, Component[]>
+  ): Component | undefined {
+    if (raw.sourceComponentId) {
+      return components.find((component) => component.id === raw.sourceComponentId);
+    }
+
+    const sourceComponents = fileToComponents.get(raw.sourceFile);
+    if (!sourceComponents || sourceComponents.length === 0) {
+      return undefined;
+    }
+
+    if (sourceComponents.length === 1) {
+      return sourceComponents[0];
+    }
+
+    if (raw.nodeStartPosition !== undefined) {
+      return sourceComponents.find(
+        (component) => component.type !== ComponentType.Module && component.parent !== null
+      ) || sourceComponents[0];
+    }
+
+    return sourceComponents.find((component) => component.type === ComponentType.Module) || sourceComponents[0];
+  }
+
+  private upsertRelationship(
+    relationshipMap: Map<string, Relationship>,
+    sourceComponent: Component,
+    targetComponent: Component,
+    raw: RawRelationship
+  ): void {
+    const key = `${sourceComponent.id}-${targetComponent.id}-${raw.type}`;
+    const existing = relationshipMap.get(key);
+
+    if (existing) {
+      existing.metadata.occurrences += raw.occurrences;
+      return;
+    }
+
+    relationshipMap.set(key, {
+      id: this.generateRelationshipId(),
+      source: sourceComponent.id,
+      target: targetComponent.id,
+      type: raw.type,
+      strength: 0,
+      metadata: {
+        occurrences: raw.occurrences,
+        bidirectional: false
+      }
+    });
+  }
+
+  private finalizeRelationshipMap(relationshipMap: Map<string, Relationship>): Relationship[] {
+    const relationships: Relationship[] = [];
+
+    for (const relationship of relationshipMap.values()) {
+      relationship.strength = Math.min(1.0, Math.log10(relationship.metadata.occurrences + 1) / 2);
+
+      const reverseKey = `${relationship.target}-${relationship.source}-${relationship.type}`;
+      if (relationshipMap.has(reverseKey)) {
+        relationship.metadata.bidirectional = true;
+      }
+
+      relationships.push(relationship);
+    }
+
+    return relationships;
+  }
 
   /**
    * Find component by matching identifier (name, module path, etc.)
@@ -897,10 +990,7 @@ export class RelationshipExtractor {
    * Find the most specific component that contains a given AST node
    * Uses AST traversal to find the containing function/class definition
    */
-  private findComponentByNodePosition(lineNumber: number, components: Component[], filePath: string): string | undefined {
-    // Filter components in the same file
-    const fileComponents = components.filter(c => c.filePaths.includes(filePath));
-    
+  private findComponentByNodePosition(_lineNumber: number, _components: Component[], _filePath: string): string | undefined {
     // Since we don't have line ranges for components, we use a heuristic:
     // - For modules (top-level), return the module component
     // - For functions/classes, we need more context from the AST
