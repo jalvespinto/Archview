@@ -11,7 +11,7 @@ import { DiagramData, WebviewMessage, AbstractionLevel } from '../types';
  * WebviewManager handles webview lifecycle and communication
  */
 export class WebviewManager {
-  private panel: any = null;
+  private panel: vscode.WebviewPanel | undefined;
   private messageHandlers: Map<string, (message: WebviewMessage) => void> = new Map();
   private isDisposed = false;
   private messageListenerDisposable: vscode.Disposable | undefined;
@@ -20,7 +20,7 @@ export class WebviewManager {
    * Create and initialize webview panel
    * Requirements: 2.1
    */
-  createWebview(): any {
+  createWebview(): vscode.WebviewPanel {
     if (this.panel) {
       // Reuse existing panel
       this.panel.reveal();
@@ -112,7 +112,7 @@ export class WebviewManager {
    * Check if webview is active
    */
   isActive(): boolean {
-    return this.panel !== null && !this.isDisposed;
+    return this.panel !== undefined && !this.isDisposed;
   }
 
   /**
@@ -139,7 +139,7 @@ export class WebviewManager {
   /**
    * Create webview panel using Kiro/VS Code API
    */
-  private createWebviewPanel(): any {
+  private createWebviewPanel(): vscode.WebviewPanel {
     // Create webview panel using Kiro/VS Code API
     // ViewColumn.One = 1 (show in first editor column)
     const panel = vscode.window.createWebviewPanel(
@@ -185,7 +185,7 @@ export class WebviewManager {
    */
   private handleDisposal(): void {
     this.isDisposed = true;
-    this.panel = null;
+    this.panel = undefined;
     this.messageHandlers.clear();
     this.messageListenerDisposable?.dispose();
     this.messageListenerDisposable = undefined;

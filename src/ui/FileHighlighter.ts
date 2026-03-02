@@ -3,11 +3,21 @@
  * Requirements: 4.1, 4.2, 4.3, 4.4, 4.5
  */
 
+import * as vscode from 'vscode';
+
 // Kiro IDE API types (to be provided by Kiro runtime)
 interface FileDecoration {
   badge?: string;
   color?: string;
   tooltip?: string;
+}
+
+interface KiroWorkspaceAPI {
+  applyFileDecoration(filePath: string, decoration: FileDecoration): void;
+}
+
+interface KiroAPI {
+  workspace?: KiroWorkspaceAPI;
 }
 
 /**
@@ -16,8 +26,8 @@ interface FileDecoration {
  */
 export class FileHighlighter {
   private highlightedFiles: Set<string> = new Set();
-  private decorationProvider: any = null;
-  private kiroAPI: any = null;
+  private decorationProvider: vscode.TextEditorDecorationType | null = null;
+  private kiroAPI: KiroAPI | null = null;
 
   constructor() {
     // Try to access Kiro API

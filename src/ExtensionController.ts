@@ -35,18 +35,18 @@ import { MemoryManager } from './performance/MemoryManager';
 interface Memento {
   get<T>(key: string): T | undefined;
   get<T>(key: string, defaultValue: T): T;
-  update(key: string, value: any): Thenable<void>;
+  update(key: string, value: unknown): Thenable<void>;
 }
 
 interface ExtensionContext {
-  subscriptions: any[];
+  subscriptions: vscode.Disposable[];
   globalState: Memento;
   workspaceState: Memento;
 }
 
 interface Command {
   command: string;
-  callback: (...args: any[]) => any;
+  callback: (...args: unknown[]) => unknown;
 }
 
 /**
@@ -289,7 +289,7 @@ export class ExtensionController {
       this.webviewManager.postMessage({
         type: 'diagramOutOfSync',
         timestamp: event.timestamp
-      } as any);
+      });
     }
 
     // Get configuration to check if auto-refresh is enabled
@@ -353,7 +353,7 @@ export class ExtensionController {
       if (this.webviewManager.isActive()) {
         this.webviewManager.postMessage({
           type: 'diagramRefreshed'
-        } as any);
+        });
       }
     } catch (error) {
       // Keep diagram marked as out of sync on error

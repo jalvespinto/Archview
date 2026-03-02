@@ -482,7 +482,7 @@ These code quality fixes clean up debug statements, improve type safety, and enh
     - _Preservation: Core functionality unchanged, just cleaner output_
     - _Requirements: 2.15_
 
-  - [ ] 15.2 Issue 1.16 - Remove troubleshooting files
+  - [x] 15.2 Issue 1.16 - Remove troubleshooting files
     - Review each troubleshooting file to verify it's not actual documentation
     - Delete 12 troubleshooting/debug artifacts from repository root:
       - COMMANDS_FIXED.md
@@ -503,7 +503,7 @@ These code quality fixes clean up debug statements, improve type safety, and enh
     - _Preservation: Actual documentation preserved_
     - _Requirements: 2.16_
 
-  - [ ] 15.3 Issue 1.17 - Add proper type annotations
+  - [x] 15.3 Issue 1.17 - Add proper type annotations
     - Fix 10 explicit `any` annotations across 3 critical files:
     - **WebviewManager.ts (3 instances)**:
       - Line 14: Change `private panel: any = null` to `private panel: vscode.WebviewPanel | undefined`
