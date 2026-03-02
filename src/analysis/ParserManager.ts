@@ -521,6 +521,13 @@ export class ParserManager {
    * Dispose of all parsers and free resources
    */
   dispose(): void {
+    // Delete all parser instances to free native resources
+    // Tree-sitter parsers have a delete() method but it's not in the TypeScript types
+    for (const parser of this.parsers.values()) {
+      if (typeof (parser as any).delete === 'function') {
+        (parser as any).delete();
+      }
+    }
     this.parsers.clear();
     this.initialized = false;
   }
