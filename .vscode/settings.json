@@ -16,6 +16,7 @@
         "ps *",
         "pkill *",
         "rm *",
-        "for *"
+        "for *",
+        "find *"
     ]
 }
