@@ -5,6 +5,7 @@
  */
 
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
 import { DiagramData, WebviewMessage, AbstractionLevel } from '../types';
 
 /**
@@ -197,57 +198,66 @@ export class WebviewManager {
    * For now, returns inline HTML with embedded styles and script
    */
   getWebviewContent(): string {
-    // TODO: Load from bundled webview assets (index.html, styles.css, webview.js)
-    // For now, return inline HTML
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
-  <title>Architecture Diagram</title>
-  <style>
-    ${this.getInlineStyles()}
-  </style>
-</head>
-<body>
-  <div id="diagram-container"></div>
-  <div id="controls">
-    <div class="control-group">
-      <label>Zoom</label>
-      <button id="zoom-in" title="Zoom In">+</button>
-      <button id="zoom-out" title="Zoom Out">-</button>
-      <button id="fit-view" title="Fit to View">Fit</button>
+      // Generate nonce for CSP
+      const nonce = this.generateNonce();
+
+      // TODO: Load from bundled webview assets (index.html, styles.css, webview.js)
+      // For now, return inline HTML
+      return `<!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+    <title>Architecture Diagram</title>
+    <style nonce="${nonce}">
+      ${this.getInlineStyles()}
+    </style>
+  </head>
+  <body>
+    <div id="diagram-container"></div>
+    <div id="controls">
+      <div class="control-group">
+        <label>Zoom</label>
+        <button id="zoom-in" title="Zoom In">+</button>
+        <button id="zoom-out" title="Zoom Out">-</button>
+        <button id="fit-view" title="Fit to View">Fit</button>
+      </div>
+      <div class="control-group">
+        <label>Abstraction Level</label>
+        <select id="abstraction-level">
+          <option value="1">Overview</option>
+          <option value="2" selected>Module</option>
+          <option value="3">Detailed</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label>Export</label>
+        <button id="export-png" title="Export as PNG">PNG</button>
+        <button id="export-svg" title="Export as SVG">SVG</button>
+      </div>
+      <div class="control-group">
+        <button id="refresh" title="Refresh Diagram">Refresh</button>
+      </div>
     </div>
-    <div class="control-group">
-      <label>Abstraction Level</label>
-      <select id="abstraction-level">
-        <option value="1">Overview</option>
-        <option value="2" selected>Module</option>
-        <option value="3">Detailed</option>
-      </select>
+    <div id="loading" style="display: none;">
+      <div class="spinner"></div>
+      <p>Loading diagram...</p>
     </div>
-    <div class="control-group">
-      <label>Export</label>
-      <button id="export-png" title="Export as PNG">PNG</button>
-      <button id="export-svg" title="Export as SVG">SVG</button>
+    <div id="error" style="display: none;">
+      <p class="error-message"></p>
     </div>
-    <div class="control-group">
-      <button id="refresh" title="Refresh Diagram">Refresh</button>
-    </div>
-  </div>
-  <div id="loading" style="display: none;">
-    <div class="spinner"></div>
-    <p>Loading diagram...</p>
-  </div>
-  <div id="error" style="display: none;">
-    <p class="error-message"></p>
-  </div>
-  <script>
-    ${this.getInlineScript()}
-  </script>
-</body>
-</html>`;
+    <script nonce="${nonce}">
+      ${this.getInlineScript()}
+    </script>
+  </body>
+  </html>`;
+    }
+  /**
+   * Generate a cryptographically secure nonce for CSP
+   */
+  private generateNonce(): string {
+    return crypto.randomBytes(16).toString('base64');
   }
 
   /**

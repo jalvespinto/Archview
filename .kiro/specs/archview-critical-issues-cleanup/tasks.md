@@ -525,7 +525,7 @@ These code quality fixes clean up debug statements, improve type safety, and enh
     - _Preservation: Runtime behavior identical, compile-time safety improved_
     - _Requirements: 2.17_
 
-  - [ ] 15.4 Issue 1.20 - Implement nonce-based CSP
+  - [x] 15.4 Issue 1.20 - Implement nonce-based CSP
     - In WebviewManager.ts: Add `import * as crypto from 'crypto'` at top
     - Add generateNonce() method: `return crypto.randomBytes(16).toString('base64')`
     - Update getWebviewContent() at line 183 to generate nonce
@@ -538,7 +538,7 @@ These code quality fixes clean up debug statements, improve type safety, and enh
     - _Preservation: Webview rendering and functionality identical_
     - _Requirements: 2.20_
 
-  - [ ] 15.5 Verify Phase 4 exploration tests now pass
+  - [x] 15.5 Verify Phase 4 exploration tests now pass
     - **Property 1: Expected Behavior** - Code Quality Issues Fixed
     - **IMPORTANT**: Re-run the SAME tests from task 13 - do NOT write new tests
     - Run bug condition exploration tests from step 13
@@ -549,7 +549,7 @@ These code quality fixes clean up debug statements, improve type safety, and enh
     - Verify webview uses nonce-based CSP instead of unsafe-inline
     - _Requirements: 2.15, 2.16, 2.17, 2.20_
 
-  - [ ] 15.6 Verify Phase 4 preservation tests still pass
+  - [x] 15.6 Verify Phase 4 preservation tests still pass
     - **Property 2: Preservation** - Core Functionality Unchanged
     - **IMPORTANT**: Re-run the SAME tests from task 14 — do NOT write new tests
     - Run preservation property tests from step 14

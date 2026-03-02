@@ -305,9 +305,9 @@ describe('Phase 4 Preservation Tests - Core Functionality Unchanged', () => {
     it('should contain style, script, and CSP meta tags in HTML output', () => {
       const html = manager.getWebviewContent();
 
-      expect(html).toContain('<style>');
+      expect(html).toMatch(/<style nonce="[^"]+"/);
       expect(html).toContain('</style>');
-      expect(html).toContain('<script>');
+      expect(html).toMatch(/<script nonce="[^"]+"/);
       expect(html).toContain('</script>');
       expect(html).toContain('<meta http-equiv="Content-Security-Policy"');
       
