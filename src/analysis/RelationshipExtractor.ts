@@ -119,78 +119,13 @@ export class RelationshipExtractor {
     const { ast, components, parserManager } = context;
     const rawRelationships: RawRelationship[] = [];
     const rootNode = ast.tree.rootNode;
-
-    // Extract import relationships
-    const importNodes = parserManager.extractNodesByType(ast, {
-      nodeTypes: ['import_declaration']
-    });
-
-    for (const importNode of importNodes) {
-      const importPath = this.extractJavaImport(importNode, ast.sourceCode);
-      if (importPath) {
-        rawRelationships.push({
-          sourceFile: ast.filePath,
-          targetIdentifier: importPath,
-          type: RelationshipType.Import,
-          occurrences: 1
-        });
-      }
-    }
-
-    // Extract inheritance relationships (extends, implements)
-    const classNodes = parserManager.extractNodesByType(ast, {
-      nodeTypes: ['class_declaration']
-    });
-
-    for (const classNode of classNodes) {
-      const treeNode = findNodeInTree(rootNode, classNode);
-      if (treeNode) {
-        const extendsClass = this.extractJavaExtends(treeNode, ast.sourceCode);
-        if (extendsClass) {
-          rawRelationships.push({
-            sourceFile: ast.filePath,
-            targetIdentifier: extendsClass,
-            type: RelationshipType.Inheritance,
-            occurrences: 1
-          });
-        }
-
-        const implementsInterfaces = this.extractJavaImplements(treeNode, ast.sourceCode);
-        for (const iface of implementsInterfaces) {
-          rawRelationships.push({
-            sourceFile: ast.filePath,
-            targetIdentifier: iface,
-            type: RelationshipType.Inheritance,
-            occurrences: 1
-          });
-        }
-      }
-    }
-
-    // Extract function call relationships
     const callNodes = parserManager.extractNodesByType(ast, {
       nodeTypes: ['method_invocation']
     });
 
-    const callCounts = new Map<string, number>();
-    for (const callNode of callNodes) {
-      const treeNode = findNodeInTree(rootNode, callNode);
-      if (treeNode) {
-        const methodName = this.extractJavaMethodCall(treeNode, ast.sourceCode);
-        if (methodName) {
-          callCounts.set(methodName, (callCounts.get(methodName) || 0) + 1);
-        }
-      }
-    }
-
-    for (const [methodName, count] of callCounts.entries()) {
-      rawRelationships.push({
-        sourceFile: ast.filePath,
-        targetIdentifier: methodName,
-        type: RelationshipType.FunctionCall,
-        occurrences: count
-      });
-    }
+    this.collectJavaImportRelationships(ast, parserManager, rawRelationships);
+    this.collectJavaInheritanceRelationships(ast, parserManager, rootNode, rawRelationships);
+    this.collectJavaFunctionCallRelationships(ast, rootNode, callNodes, rawRelationships);
 
     return this.mapRelationshipsToComponents(rawRelationships, components);
   }
@@ -247,6 +182,95 @@ export class RelationshipExtractor {
     }
 
     return this.mapRelationshipsToComponents(rawRelationships, components);
+  }
+
+  private collectJavaImportRelationships(
+    ast: ParsedAST,
+    parserManager: ParserManager,
+    rawRelationships: RawRelationship[]
+  ): void {
+    const importNodes = parserManager.extractNodesByType(ast, {
+      nodeTypes: ['import_declaration']
+    });
+
+    for (const importNode of importNodes) {
+      const importPath = this.extractJavaImport(importNode, ast.sourceCode);
+      if (importPath) {
+        rawRelationships.push({
+          sourceFile: ast.filePath,
+          targetIdentifier: importPath,
+          type: RelationshipType.Import,
+          occurrences: 1
+        });
+      }
+    }
+  }
+
+  private collectJavaInheritanceRelationships(
+    ast: ParsedAST,
+    parserManager: ParserManager,
+    rootNode: Parser.SyntaxNode,
+    rawRelationships: RawRelationship[]
+  ): void {
+    const classNodes = parserManager.extractNodesByType(ast, {
+      nodeTypes: ['class_declaration']
+    });
+
+    for (const classNode of classNodes) {
+      const treeNode = findNodeInTree(rootNode, classNode);
+      if (!treeNode) {
+        continue;
+      }
+
+      const extendsClass = this.extractJavaExtends(treeNode, ast.sourceCode);
+      if (extendsClass) {
+        rawRelationships.push({
+          sourceFile: ast.filePath,
+          targetIdentifier: extendsClass,
+          type: RelationshipType.Inheritance,
+          occurrences: 1
+        });
+      }
+
+      const implementsInterfaces = this.extractJavaImplements(treeNode, ast.sourceCode);
+      for (const iface of implementsInterfaces) {
+        rawRelationships.push({
+          sourceFile: ast.filePath,
+          targetIdentifier: iface,
+          type: RelationshipType.Inheritance,
+          occurrences: 1
+        });
+      }
+    }
+  }
+
+  private collectJavaFunctionCallRelationships(
+    ast: ParsedAST,
+    rootNode: Parser.SyntaxNode,
+    callNodes: ExtractedNode[],
+    rawRelationships: RawRelationship[]
+  ): void {
+    const callCounts = new Map<string, number>();
+    for (const callNode of callNodes) {
+      const treeNode = findNodeInTree(rootNode, callNode);
+      if (!treeNode) {
+        continue;
+      }
+
+      const methodName = this.extractJavaMethodCall(treeNode, ast.sourceCode);
+      if (methodName) {
+        callCounts.set(methodName, (callCounts.get(methodName) || 0) + 1);
+      }
+    }
+
+    for (const [methodName, count] of callCounts.entries()) {
+      rawRelationships.push({
+        sourceFile: ast.filePath,
+        targetIdentifier: methodName,
+        type: RelationshipType.FunctionCall,
+        occurrences: count
+      });
+    }
   }
 
   private collectPythonImportRelationships(
@@ -363,32 +387,31 @@ export class RelationshipExtractor {
 
   private extractPythonImports(node: ExtractedNode, _sourceCode: string): string[] {
     const imports: string[] = [];
-
-    // import_statement: import module1, module2
-    // import_from_statement: from module import name1, name2
-    if (node.type === 'import_statement') {
-      // Extract dotted_name nodes
-      for (const child of node.children || []) {
-        if (child.type === 'dotted_name' || child.type === 'aliased_import') {
-          const moduleName = this.extractPythonModuleName(child);
-          if (moduleName) {
-            imports.push(moduleName);
-          }
-        }
-      }
-    } else if (node.type === 'import_from_statement') {
-      // Extract module name from 'from' clause
-      for (const child of node.children || []) {
-        if (child.type === 'dotted_name') {
-          const moduleName = this.extractPythonModuleName(child);
-          if (moduleName) {
-            imports.push(moduleName);
-          }
-        }
+    const candidateNodes = this.getPythonImportCandidateNodes(node);
+    for (const candidateNode of candidateNodes) {
+      const moduleName = this.extractPythonModuleName(candidateNode);
+      if (moduleName) {
+        imports.push(moduleName);
       }
     }
 
     return imports;
+  }
+
+  private getPythonImportCandidateNodes(node: ExtractedNode): ExtractedNode[] {
+    const children = node.children || [];
+
+    if (node.type === 'import_statement') {
+      return children.filter(
+        (child) => child.type === 'dotted_name' || child.type === 'aliased_import'
+      );
+    }
+
+    if (node.type === 'import_from_statement') {
+      return children.filter((child) => child.type === 'dotted_name');
+    }
+
+    return [];
   }
 
   private extractPythonModuleName(node: ExtractedNode): string | null {
@@ -683,54 +706,68 @@ export class RelationshipExtractor {
   }
 
   private extractJSFunctionCall(node: Parser.SyntaxNode, _sourceCode: string): string | null {
-    // call_expression has a 'function' field
     if (node.type === 'call_expression') {
       const functionNode = node.childForFieldName('function');
-      if (functionNode) {
-        // Handle simple identifiers and member expressions
-        if (functionNode.type === 'identifier') {
-          return functionNode.text;
-        } else if (functionNode.type === 'member_expression') {
-          // For member expressions, get the property name
-          const propertyNode = functionNode.childForFieldName('property');
-          if (propertyNode) {
-            return propertyNode.text;
-          }
-        }
+      if (!functionNode) {
+        return null;
       }
+
+      if (functionNode.type === 'identifier') {
+        return functionNode.text;
+      }
+
+      if (functionNode.type === 'member_expression') {
+        return functionNode.childForFieldName('property')?.text || null;
+      }
+
       return null;
     }
 
-    // Some reserved keyword identifiers surface as ERROR nodes (e.g., `var()`).
     if (node.type === 'ERROR') {
-      let calleeText: string | null = null;
-      let hasArgs = false;
-
-      for (let i = 0; i < node.childCount; i++) {
-        const child = node.child(i);
-        if (!child) {
-          continue;
-        }
-
-        if (child.type === 'formal_parameters' || child.type === 'arguments' || child.type === 'argument_list') {
-          hasArgs = true;
-          continue;
-        }
-
-        if (!calleeText && child.isNamed) {
-          const candidate = child.text;
-          if (/^[A-Za-z_$][\\w$]*$/.test(candidate)) {
-            calleeText = candidate;
-          }
-        }
-      }
-
-      if (calleeText && hasArgs) {
-        return calleeText;
-      }
+      return this.extractJSFunctionCallFromErrorNode(node);
     }
 
     return null;
+  }
+
+  private extractJSFunctionCallFromErrorNode(node: Parser.SyntaxNode): string | null {
+    let calleeText: string | null = null;
+    let hasArgs = false;
+
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i);
+      if (!child) {
+        continue;
+      }
+
+      if (this.isJSCallArgumentNode(child.type)) {
+        hasArgs = true;
+        continue;
+      }
+
+      if (!calleeText && child.isNamed) {
+        const candidate = child.text;
+        if (this.isValidJSCallIdentifier(candidate)) {
+          calleeText = candidate;
+        }
+      }
+    }
+
+    if (calleeText && hasArgs) {
+      return calleeText;
+    }
+
+    return null;
+  }
+
+  private isJSCallArgumentNode(nodeType: string): boolean {
+    return nodeType === 'formal_parameters' ||
+      nodeType === 'arguments' ||
+      nodeType === 'argument_list';
+  }
+
+  private isValidJSCallIdentifier(value: string): boolean {
+    return /^[A-Za-z_$][\\w$]*$/.test(value);
   }
 
   // ============================================================================
@@ -1006,56 +1043,61 @@ export class RelationshipExtractor {
    * to find the enclosing function or class definition
    */
   private findContainingComponent(node: Parser.SyntaxNode, components: Component[], filePath: string): string | undefined {
-    // Filter components in the same file
     const fileComponents = components.filter(c => c.filePaths.includes(filePath));
-    
-    // Traverse up the AST to find the enclosing function or class
+
     let current: Parser.SyntaxNode | null = node;
     while (current) {
-      // Check if this node is a function or class definition
-      const nodeType = current.type;
-      if (nodeType === 'function_definition' || nodeType === 'class_definition' ||
-          nodeType === 'function_declaration' || nodeType === 'class_declaration' ||
-          nodeType === 'class' || nodeType === 'method_definition') {
-        
-        // Extract the name of this function/class
-        // Try to get the name field first
-        let name: string | null = null;
-        
-        // For tree-sitter nodes, try childForFieldName
-        if (typeof current.childForFieldName === 'function') {
-          const nameNode = current.childForFieldName('name');
-          if (nameNode) {
-            name = nameNode.text;
-          }
-        }
-        
-        // Fallback: search for identifier child
-        if (!name) {
-          for (let i = 0; i < current.childCount; i++) {
-            const child = current.child(i);
-            if (child && child.type === 'identifier') {
-              name = child.text;
-              break;
-            }
-          }
-        }
-        
-        if (name) {
-          // Find the component with this name
-          const component = fileComponents.find(c => c.name === name && c.type !== ComponentType.Module);
-          if (component) {
-            return component.id;
-          }
+      if (this.isComponentContainerNode(current.type)) {
+        const name = this.extractContainerNodeName(current);
+        const componentId = this.findNamedNonModuleComponentId(name, fileComponents);
+        if (componentId) {
+          return componentId;
         }
       }
-      
+
       current = current.parent;
     }
-    
-    // If no enclosing function/class found, return the module component
-    const moduleComponent = fileComponents.find(c => c.type === ComponentType.Module);
-    return moduleComponent?.id;
+
+    return this.findModuleComponentId(fileComponents);
+  }
+
+  private isComponentContainerNode(nodeType: string): boolean {
+    return nodeType === 'function_definition' ||
+      nodeType === 'class_definition' ||
+      nodeType === 'function_declaration' ||
+      nodeType === 'class_declaration' ||
+      nodeType === 'class' ||
+      nodeType === 'method_definition';
+  }
+
+  private extractContainerNodeName(node: Parser.SyntaxNode): string | null {
+    const nameNode = node.childForFieldName('name');
+    if (nameNode) {
+      return nameNode.text;
+    }
+
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i);
+      if (child && child.type === 'identifier') {
+        return child.text;
+      }
+    }
+
+    return null;
+  }
+
+  private findNamedNonModuleComponentId(name: string | null, fileComponents: Component[]): string | undefined {
+    if (!name) {
+      return undefined;
+    }
+
+    return fileComponents.find(
+      (component) => component.name === name && component.type !== ComponentType.Module
+    )?.id;
+  }
+
+  private findModuleComponentId(fileComponents: Component[]): string | undefined {
+    return fileComponents.find((component) => component.type === ComponentType.Module)?.id;
   }
 
 

@@ -75,13 +75,24 @@ export class ComponentExtractor {
    * Extracts: modules, classes, functions
    */
   private extractPythonComponents(context: ExtractionContext): FileExtractionResult {
-    const { ast, filePath, rootPath, parserManager } = context;
+    const { ast, filePath, parserManager } = context;
     const components: Component[] = [];
     const rootNode = ast.tree.rootNode;
+    const moduleComponent = this.createPythonModuleComponent(context);
+    components.push(moduleComponent);
 
-    // Create module component (abstraction level 1)
+    this.extractPythonClassComponents(ast, parserManager, rootNode, filePath, moduleComponent, components);
+    this.extractPythonTopLevelFunctionComponents(ast, rootNode, filePath, moduleComponent, components);
+
+    return { components, moduleComponent };
+  }
+
+  private createPythonModuleComponent(context: ExtractionContext): Component {
+    const { ast, filePath, rootPath } = context;
+    const rootNode = ast.tree.rootNode;
     const moduleName = this.getModuleName(filePath, rootPath);
-    const moduleComponent = this.createComponent({
+
+    return this.createComponent({
       name: moduleName,
       type: ComponentType.Module,
       language: Language.Python,
@@ -93,9 +104,16 @@ export class ComponentExtractor {
         exportedSymbols: []
       }
     });
-    components.push(moduleComponent);
+  }
 
-    // Extract classes (abstraction level 2)
+  private extractPythonClassComponents(
+    ast: ParsedAST,
+    parserManager: ParserManager,
+    rootNode: Parser.SyntaxNode,
+    filePath: string,
+    moduleComponent: Component,
+    components: Component[]
+  ): void {
     const classNodes = parserManager.extractNodesByType(ast, {
       nodeTypes: ['class_definition']
     });
@@ -119,34 +137,54 @@ export class ComponentExtractor {
       components.push(classComponent);
       moduleComponent.children.push(classComponent.id);
 
-      // Extract methods (abstraction level 3)
-      const classTreeNode = findNodeInTree(rootNode, classNode);
-      if (classTreeNode) {
-        const methodNodes = this.findDescendantsByType(classTreeNode, 'function_definition');
+      this.extractPythonClassMethodComponents(ast, rootNode, filePath, classNode, className, classComponent, components);
+    }
+  }
 
-        for (const methodNode of methodNodes) {
-          const methodName = this.extractPythonFunctionName(methodNode, ast.sourceCode);
-          if (!methodName) continue;
-
-          const methodComponent = this.createComponent({
-            name: `${className}.${methodName}`,
-            type: ComponentType.Function,
-            language: Language.Python,
-            filePaths: [filePath],
-            abstractionLevel: AbstractionLevel.Detailed,
-            parent: classComponent.id,
-            metadata: {
-              lineCount: methodNode.endPosition.row - methodNode.startPosition.row + 1,
-              exportedSymbols: []
-            }
-          });
-          components.push(methodComponent);
-          classComponent.children.push(methodComponent.id);
-        }
-      }
+  private extractPythonClassMethodComponents(
+    ast: ParsedAST,
+    rootNode: Parser.SyntaxNode,
+    filePath: string,
+    classNode: ExtractedNode,
+    className: string,
+    classComponent: Component,
+    components: Component[]
+  ): void {
+    const classTreeNode = findNodeInTree(rootNode, classNode);
+    if (!classTreeNode) {
+      return;
     }
 
-    // Extract top-level functions (abstraction level 2)
+    const methodNodes = this.findDescendantsByType(classTreeNode, 'function_definition');
+
+    for (const methodNode of methodNodes) {
+      const methodName = this.extractPythonFunctionName(methodNode, ast.sourceCode);
+      if (!methodName) continue;
+
+      const methodComponent = this.createComponent({
+        name: `${className}.${methodName}`,
+        type: ComponentType.Function,
+        language: Language.Python,
+        filePaths: [filePath],
+        abstractionLevel: AbstractionLevel.Detailed,
+        parent: classComponent.id,
+        metadata: {
+          lineCount: methodNode.endPosition.row - methodNode.startPosition.row + 1,
+          exportedSymbols: []
+        }
+      });
+      components.push(methodComponent);
+      classComponent.children.push(methodComponent.id);
+    }
+  }
+
+  private extractPythonTopLevelFunctionComponents(
+    ast: ParsedAST,
+    rootNode: Parser.SyntaxNode,
+    filePath: string,
+    moduleComponent: Component,
+    components: Component[]
+  ): void {
     const functionNodes = this.extractTopLevelNodes(rootNode, 'function_definition');
 
     for (const funcNode of functionNodes) {
@@ -168,8 +206,6 @@ export class ComponentExtractor {
       components.push(funcComponent);
       moduleComponent.children.push(funcComponent.id);
     }
-
-    return { components, moduleComponent };
   }
 
   /**
@@ -177,14 +213,36 @@ export class ComponentExtractor {
    * Extracts: modules, classes, interfaces, functions
    */
   private extractJavaScriptComponents(context: ExtractionContext): FileExtractionResult {
-    const { ast, filePath, rootPath, parserManager } = context;
+    const { ast, filePath, parserManager } = context;
     const components: Component[] = [];
     const rootNode = ast.tree.rootNode;
-    const isTypeScript = ast.language === Language.TypeScript;
+    const moduleComponent = this.createJSModuleComponent(context);
+    components.push(moduleComponent);
 
-    // Create module component (abstraction level 1)
+    this.extractJSClassComponents(
+      ast,
+      parserManager,
+      rootNode,
+      filePath,
+      moduleComponent,
+      components
+    );
+
+    if (ast.language === Language.TypeScript) {
+      this.extractTSInterfaceComponents(ast, parserManager, filePath, moduleComponent, components);
+    }
+
+    this.extractJSTopLevelFunctionComponents(ast, rootNode, filePath, moduleComponent, components);
+
+    return { components, moduleComponent };
+  }
+
+  private createJSModuleComponent(context: ExtractionContext): Component {
+    const { ast, filePath, rootPath } = context;
+    const rootNode = ast.tree.rootNode;
     const moduleName = this.getModuleName(filePath, rootPath);
-    const moduleComponent = this.createComponent({
+
+    return this.createComponent({
       name: moduleName,
       type: ComponentType.Module,
       language: ast.language,
@@ -196,9 +254,16 @@ export class ComponentExtractor {
         exportedSymbols: []
       }
     });
-    components.push(moduleComponent);
+  }
 
-    // Extract classes (abstraction level 2)
+  private extractJSClassComponents(
+    ast: ParsedAST,
+    parserManager: ParserManager,
+    rootNode: Parser.SyntaxNode,
+    filePath: string,
+    moduleComponent: Component,
+    components: Component[]
+  ): void {
     const classNodes = parserManager.extractNodesByType(ast, {
       nodeTypes: ['class_declaration', 'class']
     });
@@ -222,61 +287,85 @@ export class ComponentExtractor {
       components.push(classComponent);
       moduleComponent.children.push(classComponent.id);
 
-      // Extract methods (abstraction level 3)
-      const classTreeNode = findNodeInTree(rootNode, classNode);
-      if (classTreeNode) {
-        const methodNodes = this.findDescendantsByType(classTreeNode, 'method_definition');
+      this.extractJSClassMethodComponents(ast, rootNode, filePath, classNode, className, classComponent, components);
+    }
+  }
 
-        for (const methodNode of methodNodes) {
-          const methodName = this.extractJSMethodName(methodNode, ast.sourceCode);
-          if (!methodName) continue;
+  private extractJSClassMethodComponents(
+    ast: ParsedAST,
+    rootNode: Parser.SyntaxNode,
+    filePath: string,
+    classNode: ExtractedNode,
+    className: string,
+    classComponent: Component,
+    components: Component[]
+  ): void {
+    const classTreeNode = findNodeInTree(rootNode, classNode);
+    if (!classTreeNode) {
+      return;
+    }
 
-          const methodComponent = this.createComponent({
-            name: `${className}.${methodName}`,
-            type: ComponentType.Function,
-            language: ast.language,
-            filePaths: [filePath],
-            abstractionLevel: AbstractionLevel.Detailed,
-            parent: classComponent.id,
-            metadata: {
-              lineCount: methodNode.endPosition.row - methodNode.startPosition.row + 1,
-              exportedSymbols: []
-            }
-          });
-          components.push(methodComponent);
-          classComponent.children.push(methodComponent.id);
+    const methodNodes = this.findDescendantsByType(classTreeNode, 'method_definition');
+    for (const methodNode of methodNodes) {
+      const methodName = this.extractJSMethodName(methodNode, ast.sourceCode);
+      if (!methodName) continue;
+
+      const methodComponent = this.createComponent({
+        name: `${className}.${methodName}`,
+        type: ComponentType.Function,
+        language: ast.language,
+        filePaths: [filePath],
+        abstractionLevel: AbstractionLevel.Detailed,
+        parent: classComponent.id,
+        metadata: {
+          lineCount: methodNode.endPosition.row - methodNode.startPosition.row + 1,
+          exportedSymbols: []
         }
-      }
-    }
-
-    // Extract interfaces (TypeScript only, abstraction level 2)
-    if (isTypeScript) {
-      const interfaceNodes = parserManager.extractNodesByType(ast, {
-        nodeTypes: ['interface_declaration']
       });
-
-      for (const interfaceNode of interfaceNodes) {
-        const interfaceName = this.extractTSInterfaceName(interfaceNode, ast.sourceCode);
-        if (!interfaceName) continue;
-
-        const interfaceComponent = this.createComponent({
-          name: interfaceName,
-          type: ComponentType.Interface,
-          language: ast.language,
-          filePaths: [filePath],
-          abstractionLevel: AbstractionLevel.Module,
-          parent: moduleComponent.id,
-          metadata: {
-            lineCount: interfaceNode.endPosition.row - interfaceNode.startPosition.row + 1,
-            exportedSymbols: []
-          }
-        });
-        components.push(interfaceComponent);
-        moduleComponent.children.push(interfaceComponent.id);
-      }
+      components.push(methodComponent);
+      classComponent.children.push(methodComponent.id);
     }
+  }
 
-    // Extract top-level functions (abstraction level 2)
+  private extractTSInterfaceComponents(
+    ast: ParsedAST,
+    parserManager: ParserManager,
+    filePath: string,
+    moduleComponent: Component,
+    components: Component[]
+  ): void {
+    const interfaceNodes = parserManager.extractNodesByType(ast, {
+      nodeTypes: ['interface_declaration']
+    });
+
+    for (const interfaceNode of interfaceNodes) {
+      const interfaceName = this.extractTSInterfaceName(interfaceNode, ast.sourceCode);
+      if (!interfaceName) continue;
+
+      const interfaceComponent = this.createComponent({
+        name: interfaceName,
+        type: ComponentType.Interface,
+        language: ast.language,
+        filePaths: [filePath],
+        abstractionLevel: AbstractionLevel.Module,
+        parent: moduleComponent.id,
+        metadata: {
+          lineCount: interfaceNode.endPosition.row - interfaceNode.startPosition.row + 1,
+          exportedSymbols: []
+        }
+      });
+      components.push(interfaceComponent);
+      moduleComponent.children.push(interfaceComponent.id);
+    }
+  }
+
+  private extractJSTopLevelFunctionComponents(
+    ast: ParsedAST,
+    rootNode: Parser.SyntaxNode,
+    filePath: string,
+    moduleComponent: Component,
+    components: Component[]
+  ): void {
     const functionNodes = this.extractTopLevelNodes(rootNode, 'function_declaration');
 
     for (const funcNode of functionNodes) {
@@ -298,8 +387,6 @@ export class ComponentExtractor {
       components.push(funcComponent);
       moduleComponent.children.push(funcComponent.id);
     }
-
-    return { components, moduleComponent };
   }
 
   /**
@@ -307,16 +394,25 @@ export class ComponentExtractor {
    * Extracts: packages, classes, interfaces, methods
    */
   private extractJavaComponents(context: ExtractionContext): FileExtractionResult {
-    const { ast, filePath, rootPath, parserManager } = context;
+    const { ast, filePath, parserManager } = context;
     const components: Component[] = [];
     const rootNode = ast.tree.rootNode;
+    const packageComponent = this.createJavaPackageComponent(context);
+    components.push(packageComponent);
 
-    // Extract package name
-    const packageName = this.extractJavaPackageName(rootNode, ast.sourceCode) || 
-                       this.getModuleName(filePath, rootPath);
+    this.extractJavaClassComponents(ast, parserManager, rootNode, filePath, packageComponent, components);
+    this.extractJavaInterfaceComponents(ast, parserManager, filePath, packageComponent, components);
 
-    // Create package component (abstraction level 1)
-    const packageComponent = this.createComponent({
+    return { components, moduleComponent: packageComponent };
+  }
+
+  private createJavaPackageComponent(context: ExtractionContext): Component {
+    const { ast, filePath, rootPath } = context;
+    const rootNode = ast.tree.rootNode;
+    const packageName = this.extractJavaPackageName(rootNode, ast.sourceCode) ||
+      this.getModuleName(filePath, rootPath);
+
+    return this.createComponent({
       name: packageName,
       type: ComponentType.Package,
       language: Language.Java,
@@ -328,9 +424,16 @@ export class ComponentExtractor {
         exportedSymbols: []
       }
     });
-    components.push(packageComponent);
+  }
 
-    // Extract classes (abstraction level 2)
+  private extractJavaClassComponents(
+    ast: ParsedAST,
+    parserManager: ParserManager,
+    rootNode: Parser.SyntaxNode,
+    filePath: string,
+    packageComponent: Component,
+    components: Component[]
+  ): void {
     const classNodes = parserManager.extractNodesByType(ast, {
       nodeTypes: ['class_declaration']
     });
@@ -354,34 +457,53 @@ export class ComponentExtractor {
       components.push(classComponent);
       packageComponent.children.push(classComponent.id);
 
-      // Extract methods (abstraction level 3)
-      const classTreeNode = findNodeInTree(rootNode, classNode);
-      if (classTreeNode) {
-        const methodNodes = this.findDescendantsByType(classTreeNode, 'method_declaration');
+      this.extractJavaClassMethodComponents(ast, rootNode, filePath, classNode, className, classComponent, components);
+    }
+  }
 
-        for (const methodNode of methodNodes) {
-          const methodName = this.extractJavaMethodName(methodNode, ast.sourceCode);
-          if (!methodName) continue;
-
-          const methodComponent = this.createComponent({
-            name: `${className}.${methodName}`,
-            type: ComponentType.Function,
-            language: Language.Java,
-            filePaths: [filePath],
-            abstractionLevel: AbstractionLevel.Detailed,
-            parent: classComponent.id,
-            metadata: {
-              lineCount: methodNode.endPosition.row - methodNode.startPosition.row + 1,
-              exportedSymbols: []
-            }
-          });
-          components.push(methodComponent);
-          classComponent.children.push(methodComponent.id);
-        }
-      }
+  private extractJavaClassMethodComponents(
+    ast: ParsedAST,
+    rootNode: Parser.SyntaxNode,
+    filePath: string,
+    classNode: ExtractedNode,
+    className: string,
+    classComponent: Component,
+    components: Component[]
+  ): void {
+    const classTreeNode = findNodeInTree(rootNode, classNode);
+    if (!classTreeNode) {
+      return;
     }
 
-    // Extract interfaces (abstraction level 2)
+    const methodNodes = this.findDescendantsByType(classTreeNode, 'method_declaration');
+    for (const methodNode of methodNodes) {
+      const methodName = this.extractJavaMethodName(methodNode, ast.sourceCode);
+      if (!methodName) continue;
+
+      const methodComponent = this.createComponent({
+        name: `${className}.${methodName}`,
+        type: ComponentType.Function,
+        language: Language.Java,
+        filePaths: [filePath],
+        abstractionLevel: AbstractionLevel.Detailed,
+        parent: classComponent.id,
+        metadata: {
+          lineCount: methodNode.endPosition.row - methodNode.startPosition.row + 1,
+          exportedSymbols: []
+        }
+      });
+      components.push(methodComponent);
+      classComponent.children.push(methodComponent.id);
+    }
+  }
+
+  private extractJavaInterfaceComponents(
+    ast: ParsedAST,
+    parserManager: ParserManager,
+    filePath: string,
+    packageComponent: Component,
+    components: Component[]
+  ): void {
     const interfaceNodes = parserManager.extractNodesByType(ast, {
       nodeTypes: ['interface_declaration']
     });
@@ -405,8 +527,6 @@ export class ComponentExtractor {
       components.push(interfaceComponent);
       packageComponent.children.push(interfaceComponent.id);
     }
-
-    return { components, moduleComponent: packageComponent };
   }
 
   /**
@@ -414,16 +534,24 @@ export class ComponentExtractor {
    * Extracts: packages, structs (as classes), interfaces, functions
    */
   private extractGoComponents(context: ExtractionContext): FileExtractionResult {
-    const { ast, filePath, rootPath, parserManager } = context;
+    const { ast, filePath, parserManager } = context;
     const components: Component[] = [];
+    const packageComponent = this.createGoPackageComponent(context);
+    components.push(packageComponent);
+
+    this.extractGoStructComponents(ast, parserManager, filePath, packageComponent, components);
+    this.extractGoFunctionComponents(ast, parserManager, filePath, packageComponent, components);
+
+    return { components, moduleComponent: packageComponent };
+  }
+
+  private createGoPackageComponent(context: ExtractionContext): Component {
+    const { ast, filePath, rootPath } = context;
     const rootNode = ast.tree.rootNode;
+    const packageName = this.extractGoPackageName(rootNode, ast.sourceCode) ||
+      this.getModuleName(filePath, rootPath);
 
-    // Extract package name
-    const packageName = this.extractGoPackageName(rootNode, ast.sourceCode) || 
-                       this.getModuleName(filePath, rootPath);
-
-    // Create package component (abstraction level 1)
-    const packageComponent = this.createComponent({
+    return this.createComponent({
       name: packageName,
       type: ComponentType.Package,
       language: Language.Go,
@@ -435,9 +563,15 @@ export class ComponentExtractor {
         exportedSymbols: []
       }
     });
-    components.push(packageComponent);
+  }
 
-    // Extract structs as classes (abstraction level 2)
+  private extractGoStructComponents(
+    ast: ParsedAST,
+    parserManager: ParserManager,
+    filePath: string,
+    packageComponent: Component,
+    components: Component[]
+  ): void {
     const structNodes = parserManager.extractNodesByType(ast, {
       nodeTypes: ['type_declaration']
     });
@@ -461,8 +595,15 @@ export class ComponentExtractor {
       components.push(structComponent);
       packageComponent.children.push(structComponent.id);
     }
+  }
 
-    // Extract functions (abstraction level 2)
+  private extractGoFunctionComponents(
+    ast: ParsedAST,
+    parserManager: ParserManager,
+    filePath: string,
+    packageComponent: Component,
+    components: Component[]
+  ): void {
     const functionNodes = parserManager.extractNodesByType(ast, {
       nodeTypes: ['function_declaration', 'method_declaration']
     });
@@ -471,55 +612,71 @@ export class ComponentExtractor {
       const funcName = this.extractGoFunctionName(funcNode, ast.sourceCode);
       if (!funcName) continue;
 
-      // Check if it's a method (has receiver)
       const receiver = this.extractGoMethodReceiver(funcNode, ast.sourceCode);
-      const isMethod = !!receiver;
-
-      if (isMethod && receiver) {
-        // Find parent struct component
-        const parentStruct = components.find(
-          c => c.type === ComponentType.Class && c.name === receiver
-        );
-
-        const methodComponent = this.createComponent({
-          name: `${receiver}.${funcName}`,
-          type: ComponentType.Function,
-          language: Language.Go,
-          filePaths: [filePath],
-          abstractionLevel: AbstractionLevel.Detailed,
-          parent: parentStruct?.id || packageComponent.id,
-          metadata: {
-            lineCount: funcNode.endPosition.row - funcNode.startPosition.row + 1,
-            exportedSymbols: []
-          }
-        });
-        components.push(methodComponent);
-        
-        if (parentStruct) {
-          parentStruct.children.push(methodComponent.id);
-        } else {
-          packageComponent.children.push(methodComponent.id);
-        }
-      } else {
-        // Top-level function
-        const funcComponent = this.createComponent({
-          name: funcName,
-          type: ComponentType.Function,
-          language: Language.Go,
-          filePaths: [filePath],
-          abstractionLevel: AbstractionLevel.Module,
-          parent: packageComponent.id,
-          metadata: {
-            lineCount: funcNode.endPosition.row - funcNode.startPosition.row + 1,
-            exportedSymbols: []
-          }
-        });
-        components.push(funcComponent);
-        packageComponent.children.push(funcComponent.id);
+      if (receiver) {
+        this.addGoMethodComponent(receiver, funcName, funcNode, filePath, packageComponent, components);
+        continue;
       }
+
+      this.addGoTopLevelFunctionComponent(funcName, funcNode, filePath, packageComponent, components);
+    }
+  }
+
+  private addGoMethodComponent(
+    receiver: string,
+    functionName: string,
+    functionNode: ExtractedNode,
+    filePath: string,
+    packageComponent: Component,
+    components: Component[]
+  ): void {
+    const parentStruct = components.find(
+      c => c.type === ComponentType.Class && c.name === receiver
+    );
+
+    const methodComponent = this.createComponent({
+      name: `${receiver}.${functionName}`,
+      type: ComponentType.Function,
+      language: Language.Go,
+      filePaths: [filePath],
+      abstractionLevel: AbstractionLevel.Detailed,
+      parent: parentStruct?.id || packageComponent.id,
+      metadata: {
+        lineCount: functionNode.endPosition.row - functionNode.startPosition.row + 1,
+        exportedSymbols: []
+      }
+    });
+    components.push(methodComponent);
+
+    if (parentStruct) {
+      parentStruct.children.push(methodComponent.id);
+      return;
     }
 
-    return { components, moduleComponent: packageComponent };
+    packageComponent.children.push(methodComponent.id);
+  }
+
+  private addGoTopLevelFunctionComponent(
+    functionName: string,
+    functionNode: ExtractedNode,
+    filePath: string,
+    packageComponent: Component,
+    components: Component[]
+  ): void {
+    const funcComponent = this.createComponent({
+      name: functionName,
+      type: ComponentType.Function,
+      language: Language.Go,
+      filePaths: [filePath],
+      abstractionLevel: AbstractionLevel.Module,
+      parent: packageComponent.id,
+      metadata: {
+        lineCount: functionNode.endPosition.row - functionNode.startPosition.row + 1,
+        exportedSymbols: []
+      }
+    });
+    components.push(funcComponent);
+    packageComponent.children.push(funcComponent.id);
   }
 
   // ============================================================================
@@ -669,29 +826,38 @@ export class ComponentExtractor {
   }
 
   private extractGoStructName(node: ExtractedNode, _sourceCode: string): string | null {
-    // type_declaration contains type_spec with name and type
-    if (node.children && node.children.length > 0) {
-      for (const child of node.children) {
-        if (child.type === 'type_spec') {
-          // Find identifier (name) and check if it's a struct
-          let name = null;
-          let isStruct = false;
-          
-          for (const specChild of child.children || []) {
-            if (specChild.type === 'type_identifier') {
-              name = specChild.text;
-            }
-            if (specChild.type === 'struct_type') {
-              isStruct = true;
-            }
-          }
-          
-          if (name && isStruct) {
-            return name;
-          }
-        }
+    for (const child of node.children || []) {
+      if (child.type !== 'type_spec') {
+        continue;
+      }
+
+      const structName = this.extractStructNameFromTypeSpec(child);
+      if (structName) {
+        return structName;
       }
     }
+
+    return null;
+  }
+
+  private extractStructNameFromTypeSpec(typeSpecNode: ExtractedNode): string | null {
+    let name: string | null = null;
+    let hasStructType = false;
+
+    for (const specChild of typeSpecNode.children || []) {
+      if (specChild.type === 'type_identifier') {
+        name = specChild.text;
+      }
+
+      if (specChild.type === 'struct_type') {
+        hasStructType = true;
+      }
+    }
+
+    if (name && hasStructType) {
+      return name;
+    }
+
     return null;
   }
 
@@ -712,32 +878,57 @@ export class ComponentExtractor {
     if (node.type !== 'method_declaration') {
       return null;
     }
-    
-    if (node.children && node.children.length > 0) {
-      for (const child of node.children) {
-        if (child.type === 'parameter_list') {
-          // Extract type from receiver parameter
-          for (const param of child.children || []) {
-            if (param.type === 'parameter_declaration') {
-              for (const paramChild of param.children || []) {
-                if (paramChild.type === 'type_identifier' || paramChild.type === 'pointer_type') {
-                  // Handle pointer receivers like *MyStruct
-                  if (paramChild.type === 'pointer_type') {
-                    for (const ptrChild of paramChild.children || []) {
-                      if (ptrChild.type === 'type_identifier') {
-                        return ptrChild.text;
-                      }
-                    }
-                  } else {
-                    return paramChild.text;
-                  }
-                }
-              }
-            }
-          }
-        }
+
+    for (const child of node.children || []) {
+      if (child.type !== 'parameter_list') {
+        continue;
+      }
+
+      const receiverType = this.extractGoReceiverTypeFromParameterList(child);
+      if (receiverType) {
+        return receiverType;
       }
     }
+
+    return null;
+  }
+
+  private extractGoReceiverTypeFromParameterList(parameterListNode: ExtractedNode): string | null {
+    for (const param of parameterListNode.children || []) {
+      if (param.type !== 'parameter_declaration') {
+        continue;
+      }
+
+      const receiverType = this.extractGoReceiverTypeFromParameterDeclaration(param);
+      if (receiverType) {
+        return receiverType;
+      }
+    }
+
+    return null;
+  }
+
+  private extractGoReceiverTypeFromParameterDeclaration(parameterNode: ExtractedNode): string | null {
+    for (const paramChild of parameterNode.children || []) {
+      if (paramChild.type === 'type_identifier') {
+        return paramChild.text;
+      }
+
+      if (paramChild.type === 'pointer_type') {
+        return this.extractTypeIdentifierFromPointerType(paramChild);
+      }
+    }
+
+    return null;
+  }
+
+  private extractTypeIdentifierFromPointerType(pointerTypeNode: ExtractedNode): string | null {
+    for (const ptrChild of pointerTypeNode.children || []) {
+      if (ptrChild.type === 'type_identifier') {
+        return ptrChild.text;
+      }
+    }
+
     return null;
   }
 

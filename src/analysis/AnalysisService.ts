@@ -61,6 +61,17 @@ interface CacheEntry {
   timestamp: number;
 }
 
+interface ParseTaskResult {
+  scannedFile: ScannedFile;
+  ast: ParsedAST;
+}
+
+interface ExtractionAggregation {
+  allComponents: Component[];
+  allRelationships: Relationship[];
+  fileGroundingDataMap: Map<string, FileGroundingData>;
+}
+
 /**
  * Options for building grounding layer
  */
@@ -108,209 +119,231 @@ export class AnalysisService {
     rootPath: string,
     options: BuildGroundingOptions
   ): Promise<GroundingData> {
-    const {
-      config,
-      progressCallback,
-      cancellationToken,
-      timeoutMs = 120000 // 120 seconds default
-    } = options;
-
+    const { config, progressCallback, cancellationToken, timeoutMs = 120000 } = options;
     const startTime = Date.now();
     this.lastProgressUpdate = startTime;
+    const stopMonitoring = this.startMemoryMonitoring();
+    try {
+      const cacheKey = this.generateCacheKey(rootPath, config);
+      const cachedResult = await this.getCachedGroundingData(cacheKey, rootPath, progressCallback);
+      if (cachedResult) return cachedResult;
+      await this.parserManager.initialize();
+      const scanResult = await this.scanProjectFiles(rootPath, config, startTime, timeoutMs, progressCallback, cancellationToken);
+      const extractionAggregation = await this.parseAndExtractFiles(rootPath, scanResult.files, startTime, timeoutMs, progressCallback, cancellationToken);
+      const groundingData = this.buildGroundingDataStructure(rootPath, scanResult.files.map((file) => file.path), extractionAggregation, startTime, timeoutMs, progressCallback, cancellationToken);
+      await this.cacheResult(cacheKey, groundingData, rootPath, scanResult.files.map((file) => file.absolutePath));
+      this.reportProgress(100, 'Analysis complete', progressCallback);
+      return groundingData;
+    } catch (error) {
+      this.rethrowBuildGroundingError(error);
+    } finally {
+      stopMonitoring();
+    }
+  }
 
-    // Start memory monitoring (Requirements: 9.1)
+  private startMemoryMonitoring(): () => void {
     this.memoryManager.setBaseline();
-    const stopMonitoring = this.memoryManager.startAnalysisMonitoring((usageMB) => {
+    return this.memoryManager.startAnalysisMonitoring((usageMB) => {
       console.warn(`Memory limit exceeded during analysis: ${usageMB.toFixed(2)}MB > 500MB`);
       throw new MemoryLimitExceededError(
         `Analysis memory limit exceeded: ${usageMB.toFixed(2)}MB > 500MB`
       );
     });
+  }
 
-    try {
-      // Check cache first
-      const cacheKey = this.generateCacheKey(rootPath, config);
-      const cachedResult = await this.checkCache(cacheKey, rootPath);
-      if (cachedResult) {
-        this.reportProgress(100, 'Using cached analysis results', progressCallback);
-        return cachedResult;
+  private async getCachedGroundingData(
+    cacheKey: string,
+    rootPath: string,
+    progressCallback?: ProgressCallback
+  ): Promise<GroundingData | null> {
+    const cachedResult = await this.checkCache(cacheKey, rootPath);
+    if (!cachedResult) {
+      return null;
+    }
+
+    this.reportProgress(100, 'Using cached analysis results', progressCallback);
+    return cachedResult;
+  }
+
+  private async scanProjectFiles(
+    rootPath: string,
+    config: AnalysisConfig,
+    startTime: number,
+    timeoutMs: number,
+    progressCallback?: ProgressCallback,
+    cancellationToken?: CancellationToken
+  ): Promise<{ files: ScannedFile[] }> {
+    this.checkCancellation(cancellationToken);
+    this.checkTimeout(startTime, timeoutMs, 'File scanning');
+    this.reportProgress(0, 'Scanning file system...', progressCallback);
+
+    const scanOptions: ScanOptions = {
+      includePatterns: config.includePatterns,
+      excludePatterns: config.excludePatterns,
+      maxFiles: config.maxFiles,
+      maxDepth: config.maxDepth,
+      respectGitignore: true
+    };
+
+    const scanResult = await this.fileScanner.scan(rootPath, scanOptions);
+    this.reportProgress(10, `Found ${scanResult.files.length} files`, progressCallback);
+    return scanResult;
+  }
+
+  private async parseAndExtractFiles(
+    rootPath: string,
+    scannedFiles: ScannedFile[],
+    startTime: number,
+    timeoutMs: number,
+    progressCallback?: ProgressCallback,
+    cancellationToken?: CancellationToken
+  ): Promise<ExtractionAggregation> {
+    this.checkCancellation(cancellationToken);
+    this.checkTimeout(startTime, timeoutMs, 'File parsing');
+    const allComponents: Component[] = [];
+    const allRelationships: Relationship[] = [];
+    const fileGroundingDataMap = new Map<string, FileGroundingData>();
+    const totalFiles = scannedFiles.length;
+    const filePaths = scannedFiles.map((file) => file.absolutePath);
+    const fileContents = await this.optimizer.batchReadFiles(filePaths);
+    const parseResults = await this.optimizer.parseFilesInParallel<ParseTaskResult>(
+      scannedFiles.map((file) => file.path),
+      async (filePath) => {
+        const scannedFile = scannedFiles.find((file) => file.path === filePath);
+        if (!scannedFile) {
+          throw new Error(`File not found: ${filePath}`);
+        }
+        const sourceCode = fileContents.get(scannedFile.absolutePath) || '';
+        const ast = await this.optimizer.parseIncremental(
+          scannedFile.path,
+          sourceCode,
+          async (content) =>
+            this.parserManager.parseFile(
+              scannedFile.path,
+              content,
+              scannedFile.language
+            )
+        );
+        return { scannedFile, ast };
       }
-
-      // Initialize parser manager
-      await this.parserManager.initialize();
-
-      // Phase 1: Scan file system (10% of progress)
-      this.checkCancellation(cancellationToken);
-      this.checkTimeout(startTime, timeoutMs, 'File scanning');
-      this.reportProgress(0, 'Scanning file system...', progressCallback);
-
-      const scanOptions: ScanOptions = {
-        includePatterns: config.includePatterns,
-        excludePatterns: config.excludePatterns,
-        maxFiles: config.maxFiles,
-        maxDepth: config.maxDepth,
-        respectGitignore: true
-      };
-
-      const scanResult = await this.fileScanner.scan(rootPath, scanOptions);
-      this.reportProgress(10, `Found ${scanResult.files.length} files`, progressCallback);
-
-      // Phase 2: Parse files and extract components (10% - 70% of progress)
+    );
+    for (let i = 0; i < parseResults.length; i++) {
       this.checkCancellation(cancellationToken);
       this.checkTimeout(startTime, timeoutMs, 'File parsing');
-
-      const allComponents: Component[] = [];
-      const allRelationships: Relationship[] = [];
-      const fileGroundingDataMap = new Map<string, FileGroundingData>();
-      const totalFiles = scanResult.files.length;
-
-      // Batch read files for better performance (Requirements: 9.3)
-      const filePaths = scanResult.files.map(f => f.absolutePath);
-      const fileContents = await this.optimizer.batchReadFiles(filePaths);
-
-      // Parse files using parallel processing (Requirements: 9.3)
-      interface ParseTaskResult {
-        scannedFile: ScannedFile;
-        ast: ParsedAST;
-      }
-
-      const parseResults = await this.optimizer.parseFilesInParallel<ParseTaskResult>(
-        scanResult.files.map(f => f.path),
-        async (filePath) => {
-          const scannedFile = scanResult.files.find(f => f.path === filePath);
-          if (!scannedFile) {
-            throw new Error(`File not found: ${filePath}`);
-          }
-
-          const sourceCode = fileContents.get(scannedFile.absolutePath) || '';
-          
-          // Use incremental parsing (Requirements: 9.3)
-          const ast = await this.optimizer.parseIncremental(
-            scannedFile.path,
-            sourceCode,
-            async (content) => {
-              return this.parserManager.parseFile(
-                scannedFile.path,
-                content,
-                scannedFile.language
-              );
-            }
-          );
-
-          return { scannedFile, ast };
-        }
-      );
-
-      // Process parse results
-      for (let i = 0; i < parseResults.length; i++) {
-        this.checkCancellation(cancellationToken);
-        this.checkTimeout(startTime, timeoutMs, 'File parsing');
-
-        const { scannedFile, ast } = parseResults[i];
-        
-        // Report progress every 5 seconds or every 10% of files
-        const progressPercentage = 10 + Math.floor((i / totalFiles) * 60);
-        if (i % Math.max(1, Math.floor(totalFiles / 10)) === 0) {
-          this.reportProgress(
-            progressPercentage,
-            `Processing file ${i + 1}/${totalFiles}: ${scannedFile.path}`,
-            progressCallback
-          );
-        }
-
-        // Skip files with critical parse errors
-        if (this.parserManager.hasErrors(ast) && ast.parseErrors.length > 0) {
-          // Still create minimal grounding data for the file
-          fileGroundingDataMap.set(scannedFile.path, {
-            path: scannedFile.path,
-            language: scannedFile.language,
-            exports: [],
-            classes: [],
-            topLevelFunctions: [],
-            imports: []
-          });
-          continue;
-        }
-
-        // Extract components
-        const extractionResult = await this.componentExtractor.extractComponents({
-          rootPath,
-          filePath: scannedFile.path,
-          ast,
-          parserManager: this.parserManager
-        });
-
-        allComponents.push(...extractionResult.components);
-
-        // Extract relationships
-        const relationships = await this.relationshipExtractor.extractRelationships({
-          ast,
-          components: extractionResult.components,
-          parserManager: this.parserManager
-        });
-
-        allRelationships.push(...relationships);
-
-        // Build file grounding data
-        const fileGrounding = this.buildFileGroundingData(
-          scannedFile.path,
-          scannedFile.language,
-          extractionResult.components,
-          ast.sourceCode
-        );
-        fileGroundingDataMap.set(scannedFile.path, fileGrounding);
-      }
-
-      this.reportProgress(70, 'Building grounding data structure...', progressCallback);
-
-      // Phase 3: Build directory tree (70% - 80% of progress)
-      this.checkCancellation(cancellationToken);
-      this.checkTimeout(startTime, timeoutMs, 'Building directory tree');
-
-      const directoryTree = this.buildDirectoryTree(rootPath, scanResult.files.map(f => f.path));
-      this.reportProgress(80, 'Building import graph...', progressCallback);
-
-      // Phase 4: Build import and inheritance graphs (80% - 90% of progress)
-      this.checkCancellation(cancellationToken);
-      this.checkTimeout(startTime, timeoutMs, 'Building relationship graphs');
-
-      const importGraph = this.buildImportGraph(allRelationships, allComponents);
-      this.reportProgress(85, 'Building inheritance graph...', progressCallback);
-
-      const inheritanceGraph = this.buildInheritanceGraph(allRelationships, allComponents);
-      this.reportProgress(90, 'Finalizing grounding data...', progressCallback);
-
-      // Phase 5: Assemble final GroundingData (90% - 100% of progress)
-      const groundingData: GroundingData = {
-        rootPath,
-        timestamp: Date.now(),
-        directoryTree,
-        files: Array.from(fileGroundingDataMap.values()),
-        importGraph,
-        inheritanceGraph
-      };
-
-      // Cache the result
-      await this.cacheResult(cacheKey, groundingData, rootPath, scanResult.files.map(f => f.absolutePath));
-      this.reportProgress(100, 'Analysis complete', progressCallback);
-
-      return groundingData;
-
-    } catch (error) {
-      if (error instanceof TimeoutError) {
-        throw error;
-      }
-      if (error instanceof CancellationError) {
-        throw error;
-      }
-      if (error instanceof MemoryLimitExceededError) {
-        throw error;
-      }
-      throw new Error(`Failed to build grounding layer: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      // Stop memory monitoring
-      stopMonitoring();
+      const parseResult = parseResults[i];
+      this.reportFileProcessingProgress(i, totalFiles, parseResult.scannedFile.path, progressCallback);
+      await this.processParsedFileResult(rootPath, parseResult, allComponents, allRelationships, fileGroundingDataMap);
     }
+    return { allComponents, allRelationships, fileGroundingDataMap };
+  }
+
+  private reportFileProcessingProgress(
+    index: number,
+    totalFiles: number,
+    filePath: string,
+    progressCallback?: ProgressCallback
+  ): void {
+    const progressPercentage = 10 + Math.floor((index / totalFiles) * 60);
+    if (index % Math.max(1, Math.floor(totalFiles / 10)) !== 0) {
+      return;
+    }
+
+    this.reportProgress(
+      progressPercentage,
+      `Processing file ${index + 1}/${totalFiles}: ${filePath}`,
+      progressCallback
+    );
+  }
+
+  private async processParsedFileResult(
+    rootPath: string,
+    parseResult: ParseTaskResult,
+    allComponents: Component[],
+    allRelationships: Relationship[],
+    fileGroundingDataMap: Map<string, FileGroundingData>
+  ): Promise<void> {
+    const { scannedFile, ast } = parseResult;
+
+    if (this.parserManager.hasErrors(ast) && ast.parseErrors.length > 0) {
+      fileGroundingDataMap.set(scannedFile.path, this.createEmptyFileGroundingData(scannedFile.path, scannedFile.language));
+      return;
+    }
+
+    const extractionResult = await this.componentExtractor.extractComponents({
+      rootPath,
+      filePath: scannedFile.path,
+      ast,
+      parserManager: this.parserManager
+    });
+    allComponents.push(...extractionResult.components);
+
+    const relationships = await this.relationshipExtractor.extractRelationships({
+      ast,
+      components: extractionResult.components,
+      parserManager: this.parserManager
+    });
+    allRelationships.push(...relationships);
+
+    const fileGrounding = this.buildFileGroundingData(
+      scannedFile.path,
+      scannedFile.language,
+      extractionResult.components,
+      ast.sourceCode
+    );
+    fileGroundingDataMap.set(scannedFile.path, fileGrounding);
+  }
+
+  private buildGroundingDataStructure(
+    rootPath: string,
+    scannedPaths: string[],
+    extractionAggregation: ExtractionAggregation,
+    startTime: number,
+    timeoutMs: number,
+    progressCallback?: ProgressCallback,
+    cancellationToken?: CancellationToken
+  ): GroundingData {
+    this.reportProgress(70, 'Building grounding data structure...', progressCallback);
+    this.checkCancellation(cancellationToken);
+    this.checkTimeout(startTime, timeoutMs, 'Building directory tree');
+
+    const directoryTree = this.buildDirectoryTree(rootPath, scannedPaths);
+    this.reportProgress(80, 'Building import graph...', progressCallback);
+
+    this.checkCancellation(cancellationToken);
+    this.checkTimeout(startTime, timeoutMs, 'Building relationship graphs');
+
+    const importGraph = this.buildImportGraph(
+      extractionAggregation.allRelationships,
+      extractionAggregation.allComponents
+    );
+    this.reportProgress(85, 'Building inheritance graph...', progressCallback);
+
+    const inheritanceGraph = this.buildInheritanceGraph(
+      extractionAggregation.allRelationships,
+      extractionAggregation.allComponents
+    );
+    this.reportProgress(90, 'Finalizing grounding data...', progressCallback);
+
+    return {
+      rootPath,
+      timestamp: Date.now(),
+      directoryTree,
+      files: Array.from(extractionAggregation.fileGroundingDataMap.values()),
+      importGraph,
+      inheritanceGraph
+    };
+  }
+
+  private rethrowBuildGroundingError(error: unknown): never {
+    if (
+      error instanceof TimeoutError ||
+      error instanceof CancellationError ||
+      error instanceof MemoryLimitExceededError
+    ) {
+      throw error;
+    }
+
+    throw new Error(`Failed to build grounding layer: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   /**

@@ -170,3 +170,73 @@ Implement and validate P0 behavioral fixes after Phase 1 infra stabilization.
 5. Self-critique:
    1. Achieved warning reduction with small, behavior-preserving extraction steps.
    2. Remaining `RelationshipExtractor` warnings are now concentrated in helper-level complexity (`extractPythonImports`, `extractJSFunctionCall`, `findContainingComponent`) and unavoidable file-length pressure; next batch should target one complex helper at a time.
+
+### Batch 6 - High-Value Module Refactor (`RelationshipExtractor` Containing-Component Lookup)
+1. Changes made:
+   1. `src/analysis/RelationshipExtractor.ts`: refactored `findContainingComponent()` by extracting helper logic:
+      1. `isComponentContainerNode()`
+      2. `extractContainerNodeName()`
+      3. `findNamedNonModuleComponentId()`
+      4. `findModuleComponentId()`
+   2. Preserved AST traversal order and fallback heuristic behavior.
+2. Warning/Error delta:
+   1. Before: `0 errors`, `47 warnings`.
+   2. After: `0 errors`, `46 warnings`.
+   3. Delta: `-1 warning`, `0 error change`.
+3. Risk introduced:
+   1. Low-to-moderate risk around component-name extraction paths in AST traversal.
+   2. Mitigated by full suite pass including `RelationshipExtractor` unit and property tests.
+4. Verification results:
+   1. `npm run lint`: PASS (`0 errors`, `46 warnings`).
+   2. `npm run compile`: PASS.
+   3. `npm test`: PASS (`37/37` suites, `515 passed`, `1 skipped`).
+5. Self-critique:
+   1. Minimal, controlled refactor reduced warning load with stable behavior.
+   2. Remaining `RelationshipExtractor` warning hotspots are now mostly helper complexity (`extractPythonImports`, `extractJSFunctionCall`) plus file-length pressure; next pass should target one parser helper at a time to avoid risk.
+
+### Batch 7 - High-Value Module Refactor (`RelationshipExtractor` JS Call Parsing)
+1. Changes made:
+   1. `src/analysis/RelationshipExtractor.ts`: refactored `extractJSFunctionCall()` to reduce branching complexity.
+   2. Added helper methods:
+      1. `extractJSFunctionCallFromErrorNode()`
+      2. `isJSCallArgumentNode()`
+      3. `isValidJSCallIdentifier()`
+   3. Preserved existing behavior for:
+      1. standard `call_expression` extraction,
+      2. fallback extraction from `ERROR` nodes for reserved-word-like call sites.
+2. Warning/Error delta:
+   1. Before: `0 errors`, `46 warnings`.
+   2. After: `0 errors`, `45 warnings`.
+   3. Delta: `-1 warning`, `0 error change`.
+3. Risk introduced:
+   1. Low-to-moderate risk in malformed/`ERROR`-node call parsing paths.
+   2. Mitigated by full passing regression suite including `RelationshipExtractor` unit and property tests.
+4. Verification results:
+   1. `npm run lint`: PASS (`0 errors`, `45 warnings`).
+   2. `npm run compile`: PASS.
+   3. `npm test`: PASS (`37/37` suites, `515 passed`, `1 skipped`).
+5. Self-critique:
+   1. Small-scope refactor continued warning reduction with no observed behavior drift.
+   2. Next warning targets should shift to `ComponentExtractor` or `extractPythonImports` depending on whether we prioritize hotspot concentration or total-impact reduction.
+
+### Batch 8 - High-Value Module Refactor (`RelationshipExtractor` Python Import Parsing)
+1. Changes made:
+   1. `src/analysis/RelationshipExtractor.ts`: refactored `extractPythonImports()` to reduce branching complexity.
+   2. Added helper `getPythonImportCandidateNodes()` to isolate node-type filtering for:
+      1. `import_statement` (`dotted_name`, `aliased_import`)
+      2. `import_from_statement` (`dotted_name`)
+   3. Kept module-name extraction semantics via existing `extractPythonModuleName()`.
+2. Warning/Error delta:
+   1. Before: `0 errors`, `45 warnings`.
+   2. After: `0 errors`, `44 warnings`.
+   3. Delta: `-1 warning`, `0 error change`.
+3. Risk introduced:
+   1. Low risk in Python import-edge extraction because filtering logic was reorganized, not behaviorally changed.
+   2. Mitigated by full passing unit + property regression coverage.
+4. Verification results:
+   1. `npm run lint`: PASS (`0 errors`, `44 warnings`).
+   2. `npm run compile`: PASS.
+   3. `npm test`: PASS (`37/37` suites, `515 passed`, `1 skipped`).
+5. Self-critique:
+   1. Narrow refactor produced another incremental warning reduction with full stability.
+   2. `RelationshipExtractor` maintainability warnings are now largely exhausted outside file-length pressure; best next impact is shifting to `ComponentExtractor` for broader warning reduction.
