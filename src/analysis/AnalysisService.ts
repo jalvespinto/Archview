@@ -12,24 +12,14 @@
  */
 
 import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as crypto from 'crypto';
 import {
   GroundingData,
-  DirectoryNode,
-  FileGroundingData,
-  ImportEdge,
-  InheritanceEdge,
-  ClassGroundingData,
-  FunctionGroundingData
+  FileGroundingData
 } from '../types/analysis';
 import {
-  Language,
   AnalysisConfig,
   Component,
-  ComponentType,
-  Relationship,
-  RelationshipType
+  Relationship
 } from '../types';
 import { FileScanner, ScanOptions } from './FileScanner';
 import { ScannedFile } from './FileScanner';
@@ -38,6 +28,24 @@ import { ComponentExtractor } from './ComponentExtractor';
 import { RelationshipExtractor } from './RelationshipExtractor';
 import { MemoryManager, MemoryLimitExceededError } from '../performance/MemoryManager';
 import { AnalysisOptimizer } from '../performance/AnalysisOptimizer';
+import {
+  buildDirectoryTreeFromFilePaths,
+  buildFileGroundingDataFromComponents,
+  buildImportGraphEdges,
+  buildInheritanceGraphEdges,
+  createEmptyGroundingDataForFile,
+  generateAnalysisCacheKey,
+  getTimedOutElapsedMs,
+  isAnalysisCancelled,
+  buildCancellationTokenState,
+  getProgressUpdateTimestamp,
+  cacheEntryMatchesFilePath,
+  formatBuildGroundingLayerError,
+  buildFileProcessingProgressUpdate,
+  isCachedFileEntryStale,
+  collectFileModificationTimes
+} from './analysisGroundingHelpers';
+import { processParsedFileResultForGrounding } from './analysisParsingHelpers';
 
 /**
  * Progress callback for tracking analysis progress
@@ -122,72 +130,39 @@ export class AnalysisService {
     const { config, progressCallback, cancellationToken, timeoutMs = 120000 } = options;
     const startTime = Date.now();
     this.lastProgressUpdate = startTime;
-    const stopMonitoring = this.startMemoryMonitoring();
+    this.memoryManager.setBaseline();
+    const stopMonitoring = this.memoryManager.startAnalysisMonitoring((usageMB) => {
+      console.warn(`Memory limit exceeded during analysis: ${usageMB.toFixed(2)}MB > 500MB`);
+      throw new MemoryLimitExceededError(`Analysis memory limit exceeded: ${usageMB.toFixed(2)}MB > 500MB`);
+    });
     try {
-      const cacheKey = this.generateCacheKey(rootPath, config);
-      const cachedResult = await this.getCachedGroundingData(cacheKey, rootPath, progressCallback);
-      if (cachedResult) return cachedResult;
+      const cacheKey = generateAnalysisCacheKey(rootPath, config);
+      const cachedResult = await this.checkCache(cacheKey, rootPath);
+      if (cachedResult) {
+        this.reportProgress(100, 'Using cached analysis results', progressCallback);
+        return cachedResult;
+      }
       await this.parserManager.initialize();
-      const scanResult = await this.scanProjectFiles(rootPath, config, startTime, timeoutMs, progressCallback, cancellationToken);
+      if (isAnalysisCancelled(cancellationToken)) throw new CancellationError('Analysis was cancelled');
+      const fileScanningElapsed = getTimedOutElapsedMs(startTime, timeoutMs);
+      if (fileScanningElapsed !== null) throw new TimeoutError(`Analysis timeout exceeded during File scanning (${fileScanningElapsed}ms > ${timeoutMs}ms)`);
+      this.reportProgress(0, 'Scanning file system...', progressCallback);
+      const scanOptions: ScanOptions = { includePatterns: config.includePatterns, excludePatterns: config.excludePatterns, maxFiles: config.maxFiles, maxDepth: config.maxDepth, respectGitignore: true };
+      const scanResult = await this.fileScanner.scan(rootPath, scanOptions);
+      this.reportProgress(10, `Found ${scanResult.files.length} files`, progressCallback);
       const extractionAggregation = await this.parseAndExtractFiles(rootPath, scanResult.files, startTime, timeoutMs, progressCallback, cancellationToken);
       const groundingData = this.buildGroundingDataStructure(rootPath, scanResult.files.map((file) => file.path), extractionAggregation, startTime, timeoutMs, progressCallback, cancellationToken);
       await this.cacheResult(cacheKey, groundingData, rootPath, scanResult.files.map((file) => file.absolutePath));
       this.reportProgress(100, 'Analysis complete', progressCallback);
       return groundingData;
     } catch (error) {
-      this.rethrowBuildGroundingError(error);
+      if (error instanceof TimeoutError || error instanceof CancellationError || error instanceof MemoryLimitExceededError) {
+        throw error;
+      }
+      throw new Error(formatBuildGroundingLayerError(error));
     } finally {
       stopMonitoring();
     }
-  }
-
-  private startMemoryMonitoring(): () => void {
-    this.memoryManager.setBaseline();
-    return this.memoryManager.startAnalysisMonitoring((usageMB) => {
-      console.warn(`Memory limit exceeded during analysis: ${usageMB.toFixed(2)}MB > 500MB`);
-      throw new MemoryLimitExceededError(
-        `Analysis memory limit exceeded: ${usageMB.toFixed(2)}MB > 500MB`
-      );
-    });
-  }
-
-  private async getCachedGroundingData(
-    cacheKey: string,
-    rootPath: string,
-    progressCallback?: ProgressCallback
-  ): Promise<GroundingData | null> {
-    const cachedResult = await this.checkCache(cacheKey, rootPath);
-    if (!cachedResult) {
-      return null;
-    }
-
-    this.reportProgress(100, 'Using cached analysis results', progressCallback);
-    return cachedResult;
-  }
-
-  private async scanProjectFiles(
-    rootPath: string,
-    config: AnalysisConfig,
-    startTime: number,
-    timeoutMs: number,
-    progressCallback?: ProgressCallback,
-    cancellationToken?: CancellationToken
-  ): Promise<{ files: ScannedFile[] }> {
-    this.checkCancellation(cancellationToken);
-    this.checkTimeout(startTime, timeoutMs, 'File scanning');
-    this.reportProgress(0, 'Scanning file system...', progressCallback);
-
-    const scanOptions: ScanOptions = {
-      includePatterns: config.includePatterns,
-      excludePatterns: config.excludePatterns,
-      maxFiles: config.maxFiles,
-      maxDepth: config.maxDepth,
-      respectGitignore: true
-    };
-
-    const scanResult = await this.fileScanner.scan(rootPath, scanOptions);
-    this.reportProgress(10, `Found ${scanResult.files.length} files`, progressCallback);
-    return scanResult;
   }
 
   private async parseAndExtractFiles(
@@ -198,8 +173,9 @@ export class AnalysisService {
     progressCallback?: ProgressCallback,
     cancellationToken?: CancellationToken
   ): Promise<ExtractionAggregation> {
-    this.checkCancellation(cancellationToken);
-    this.checkTimeout(startTime, timeoutMs, 'File parsing');
+    if (isAnalysisCancelled(cancellationToken)) throw new CancellationError('Analysis was cancelled');
+    const fileParsingElapsedStart = getTimedOutElapsedMs(startTime, timeoutMs);
+    if (fileParsingElapsedStart !== null) throw new TimeoutError(`Analysis timeout exceeded during File parsing (${fileParsingElapsedStart}ms > ${timeoutMs}ms)`);
     const allComponents: Component[] = [];
     const allRelationships: Relationship[] = [];
     const fileGroundingDataMap = new Map<string, FileGroundingData>();
@@ -228,69 +204,15 @@ export class AnalysisService {
       }
     );
     for (let i = 0; i < parseResults.length; i++) {
-      this.checkCancellation(cancellationToken);
-      this.checkTimeout(startTime, timeoutMs, 'File parsing');
+      if (isAnalysisCancelled(cancellationToken)) throw new CancellationError('Analysis was cancelled');
+      const fileParsingElapsedLoop = getTimedOutElapsedMs(startTime, timeoutMs);
+      if (fileParsingElapsedLoop !== null) throw new TimeoutError(`Analysis timeout exceeded during File parsing (${fileParsingElapsedLoop}ms > ${timeoutMs}ms)`);
       const parseResult = parseResults[i];
-      this.reportFileProcessingProgress(i, totalFiles, parseResult.scannedFile.path, progressCallback);
-      await this.processParsedFileResult(rootPath, parseResult, allComponents, allRelationships, fileGroundingDataMap);
+      const progressUpdate = buildFileProcessingProgressUpdate(i, totalFiles, parseResult.scannedFile.path);
+      if (progressUpdate) this.reportProgress(progressUpdate.percentage, progressUpdate.message, progressCallback);
+      await processParsedFileResultForGrounding({ rootPath, parseResult, parserManager: this.parserManager, componentExtractor: this.componentExtractor, relationshipExtractor: this.relationshipExtractor, buildFileGroundingData: (filePath, language, components) => buildFileGroundingDataFromComponents(filePath, language, components), createEmptyFileGroundingData: createEmptyGroundingDataForFile, allComponents, allRelationships, fileGroundingDataMap });
     }
     return { allComponents, allRelationships, fileGroundingDataMap };
-  }
-
-  private reportFileProcessingProgress(
-    index: number,
-    totalFiles: number,
-    filePath: string,
-    progressCallback?: ProgressCallback
-  ): void {
-    const progressPercentage = 10 + Math.floor((index / totalFiles) * 60);
-    if (index % Math.max(1, Math.floor(totalFiles / 10)) !== 0) {
-      return;
-    }
-
-    this.reportProgress(
-      progressPercentage,
-      `Processing file ${index + 1}/${totalFiles}: ${filePath}`,
-      progressCallback
-    );
-  }
-
-  private async processParsedFileResult(
-    rootPath: string,
-    parseResult: ParseTaskResult,
-    allComponents: Component[],
-    allRelationships: Relationship[],
-    fileGroundingDataMap: Map<string, FileGroundingData>
-  ): Promise<void> {
-    const { scannedFile, ast } = parseResult;
-
-    if (this.parserManager.hasErrors(ast) && ast.parseErrors.length > 0) {
-      fileGroundingDataMap.set(scannedFile.path, this.createEmptyFileGroundingData(scannedFile.path, scannedFile.language));
-      return;
-    }
-
-    const extractionResult = await this.componentExtractor.extractComponents({
-      rootPath,
-      filePath: scannedFile.path,
-      ast,
-      parserManager: this.parserManager
-    });
-    allComponents.push(...extractionResult.components);
-
-    const relationships = await this.relationshipExtractor.extractRelationships({
-      ast,
-      components: extractionResult.components,
-      parserManager: this.parserManager
-    });
-    allRelationships.push(...relationships);
-
-    const fileGrounding = this.buildFileGroundingData(
-      scannedFile.path,
-      scannedFile.language,
-      extractionResult.components,
-      ast.sourceCode
-    );
-    fileGroundingDataMap.set(scannedFile.path, fileGrounding);
   }
 
   private buildGroundingDataStructure(
@@ -303,22 +225,24 @@ export class AnalysisService {
     cancellationToken?: CancellationToken
   ): GroundingData {
     this.reportProgress(70, 'Building grounding data structure...', progressCallback);
-    this.checkCancellation(cancellationToken);
-    this.checkTimeout(startTime, timeoutMs, 'Building directory tree');
+    if (isAnalysisCancelled(cancellationToken)) throw new CancellationError('Analysis was cancelled');
+    const directoryTreeElapsed = getTimedOutElapsedMs(startTime, timeoutMs);
+    if (directoryTreeElapsed !== null) throw new TimeoutError(`Analysis timeout exceeded during Building directory tree (${directoryTreeElapsed}ms > ${timeoutMs}ms)`);
 
-    const directoryTree = this.buildDirectoryTree(rootPath, scannedPaths);
+    const directoryTree = buildDirectoryTreeFromFilePaths(rootPath, scannedPaths);
     this.reportProgress(80, 'Building import graph...', progressCallback);
 
-    this.checkCancellation(cancellationToken);
-    this.checkTimeout(startTime, timeoutMs, 'Building relationship graphs');
+    if (isAnalysisCancelled(cancellationToken)) throw new CancellationError('Analysis was cancelled');
+    const relationshipGraphsElapsed = getTimedOutElapsedMs(startTime, timeoutMs);
+    if (relationshipGraphsElapsed !== null) throw new TimeoutError(`Analysis timeout exceeded during Building relationship graphs (${relationshipGraphsElapsed}ms > ${timeoutMs}ms)`);
 
-    const importGraph = this.buildImportGraph(
+    const importGraph = buildImportGraphEdges(
       extractionAggregation.allRelationships,
       extractionAggregation.allComponents
     );
     this.reportProgress(85, 'Building inheritance graph...', progressCallback);
 
-    const inheritanceGraph = this.buildInheritanceGraph(
+    const inheritanceGraph = buildInheritanceGraphEdges(
       extractionAggregation.allRelationships,
       extractionAggregation.allComponents
     );
@@ -334,233 +258,6 @@ export class AnalysisService {
     };
   }
 
-  private rethrowBuildGroundingError(error: unknown): never {
-    if (
-      error instanceof TimeoutError ||
-      error instanceof CancellationError ||
-      error instanceof MemoryLimitExceededError
-    ) {
-      throw error;
-    }
-
-    throw new Error(`Failed to build grounding layer: ${error instanceof Error ? error.message : String(error)}`);
-  }
-
-  /**
-   * Build file grounding data from extracted components
-   */
-  private buildFileGroundingData(
-    filePath: string,
-    language: Language,
-    components: Component[],
-    _sourceCode: string
-  ): FileGroundingData {
-    const moduleComponent = this.findModuleComponent(filePath, components);
-    if (!moduleComponent) {
-      return this.createEmptyFileGroundingData(filePath, language);
-    }
-
-    const exports: string[] = [];
-    const classes: ClassGroundingData[] = [];
-    const topLevelFunctions: FunctionGroundingData[] = [];
-
-    if (moduleComponent.metadata.exportedSymbols) {
-      exports.push(...moduleComponent.metadata.exportedSymbols);
-    }
-
-    this.collectClasses(moduleComponent.id, components, classes, exports);
-    this.collectTopLevelFunctions(moduleComponent.id, components, topLevelFunctions, exports);
-    this.collectInterfaceExports(moduleComponent.id, components, exports);
-
-    return {
-      path: filePath,
-      language,
-      exports,
-      classes,
-      topLevelFunctions,
-      imports: [] // Will be populated from relationships in a future enhancement
-    };
-  }
-
-  private findModuleComponent(filePath: string, components: Component[]): Component | undefined {
-    return components.find((component) =>
-      component.filePaths.includes(filePath) &&
-      (component.type === ComponentType.Module || component.type === ComponentType.Package)
-    );
-  }
-
-  private createEmptyFileGroundingData(filePath: string, language: Language): FileGroundingData {
-    return {
-      path: filePath,
-      language,
-      exports: [],
-      classes: [],
-      topLevelFunctions: [],
-      imports: []
-    };
-  }
-
-  private collectClasses(
-    moduleComponentId: string,
-    components: Component[],
-    classes: ClassGroundingData[],
-    exports: string[]
-  ): void {
-    const moduleClasses = components.filter(
-      (component) => component.type === ComponentType.Class && component.parent === moduleComponentId
-    );
-
-    for (const classComponent of moduleClasses) {
-      const methods = components
-        .filter((component) => component.parent === classComponent.id && component.type === ComponentType.Function)
-        .map((methodComponent) => methodComponent.name.split('.').pop() || methodComponent.name);
-
-      classes.push({
-        name: classComponent.name,
-        superClass: undefined,
-        interfaces: [],
-        methods
-      });
-      exports.push(classComponent.name);
-    }
-  }
-
-  private collectTopLevelFunctions(
-    moduleComponentId: string,
-    components: Component[],
-    topLevelFunctions: FunctionGroundingData[],
-    exports: string[]
-  ): void {
-    const moduleFunctions = components.filter(
-      (component) => component.type === ComponentType.Function && component.parent === moduleComponentId
-    );
-
-    for (const functionComponent of moduleFunctions) {
-      topLevelFunctions.push({ name: functionComponent.name });
-      exports.push(functionComponent.name);
-    }
-  }
-
-  private collectInterfaceExports(
-    moduleComponentId: string,
-    components: Component[],
-    exports: string[]
-  ): void {
-    const moduleInterfaces = components.filter(
-      (component) => component.type === ComponentType.Interface && component.parent === moduleComponentId
-    );
-    for (const interfaceComponent of moduleInterfaces) {
-      exports.push(interfaceComponent.name);
-    }
-  }
-
-  /**
-   * Build directory tree from file paths
-   */
-  private buildDirectoryTree(rootPath: string, filePaths: string[]): DirectoryNode {
-    const root: DirectoryNode = {
-      name: path.basename(rootPath),
-      path: '',
-      children: [],
-      files: []
-    };
-
-    for (const filePath of filePaths) {
-      const parts = filePath.split(path.sep);
-      let currentNode = root;
-
-      // Navigate/create directory structure
-      for (let i = 0; i < parts.length - 1; i++) {
-        const dirName = parts[i];
-        let childNode = currentNode.children.find(c => c.name === dirName);
-
-        if (!childNode) {
-          childNode = {
-            name: dirName,
-            path: parts.slice(0, i + 1).join(path.sep),
-            children: [],
-            files: []
-          };
-          currentNode.children.push(childNode);
-        }
-
-        currentNode = childNode;
-      }
-
-      // Add file to the current directory
-      currentNode.files.push(filePath);
-    }
-
-    return root;
-  }
-
-  /**
-   * Build import graph from relationships
-   */
-  private buildImportGraph(relationships: Relationship[], components: Component[]): ImportEdge[] {
-    const importEdges: ImportEdge[] = [];
-    const componentMap = new Map(components.map(c => [c.id, c]));
-
-    for (const rel of relationships) {
-      if (rel.type === RelationshipType.Import || rel.type === RelationshipType.Dependency) {
-        const sourceComp = componentMap.get(rel.source);
-        const targetComp = componentMap.get(rel.target);
-
-        if (sourceComp && targetComp && sourceComp.filePaths[0] && targetComp.filePaths[0]) {
-          importEdges.push({
-            sourceFile: sourceComp.filePaths[0],
-            targetFile: targetComp.filePaths[0],
-            symbols: [] // Simplified for now - could extract specific imported symbols
-          });
-        }
-      }
-    }
-
-    return importEdges;
-  }
-
-  /**
-   * Build inheritance graph from relationships
-   */
-  private buildInheritanceGraph(relationships: Relationship[], components: Component[]): InheritanceEdge[] {
-    const inheritanceEdges: InheritanceEdge[] = [];
-    const componentMap = new Map(components.map(c => [c.id, c]));
-
-    for (const rel of relationships) {
-      if (rel.type === RelationshipType.Inheritance) {
-        const sourceComp = componentMap.get(rel.source);
-        const targetComp = componentMap.get(rel.target);
-
-        if (sourceComp && targetComp && sourceComp.filePaths[0]) {
-          inheritanceEdges.push({
-            childClass: sourceComp.name,
-            parentClass: targetComp.name,
-            sourceFile: sourceComp.filePaths[0],
-            type: 'extends' // Simplified - could distinguish extends vs implements
-          });
-        }
-      }
-    }
-
-    return inheritanceEdges;
-  }
-
-  /**
-   * Generate cache key from root path and config
-   */
-  private generateCacheKey(rootPath: string, config: AnalysisConfig): string {
-    const configStr = JSON.stringify({
-      includePatterns: config.includePatterns.sort(),
-      excludePatterns: config.excludePatterns.sort(),
-      maxFiles: config.maxFiles,
-      maxDepth: config.maxDepth,
-      languages: config.languages.sort()
-    });
-    
-    const hash = crypto.createHash('md5').update(rootPath + configStr).digest('hex');
-    return hash;
-  }
-
   /**
    * Check cache for existing analysis results
    * Validates that cached files haven't been modified
@@ -573,18 +270,13 @@ export class AnalysisService {
 
     // Check if any files have been modified
     for (const [filePath, cachedModTime] of entry.fileModTimes.entries()) {
-      try {
-        const absolutePath = path.join(rootPath, filePath);
-        const stats = await fs.stat(absolutePath);
-        const currentModTime = stats.mtimeMs;
-
-        if (currentModTime !== cachedModTime) {
-          // File has been modified - invalidate cache
-          this.cache.delete(cacheKey);
-          return null;
-        }
-      } catch (error) {
-        // File no longer exists - invalidate cache
+      const isStale = await isCachedFileEntryStale(
+        rootPath,
+        filePath,
+        cachedModTime,
+        async (absolutePath) => fs.stat(absolutePath)
+      );
+      if (isStale) {
         this.cache.delete(cacheKey);
         return null;
       }
@@ -602,18 +294,11 @@ export class AnalysisService {
     rootPath: string,
     filePaths: string[]
   ): Promise<void> {
-    const fileModTimes = new Map<string, number>();
-
-    // Record modification times for all analyzed files
-    for (const filePath of filePaths) {
-      try {
-        const stats = await fs.stat(filePath);
-        const relativePath = path.relative(rootPath, filePath);
-        fileModTimes.set(relativePath, stats.mtimeMs);
-      } catch (error) {
-        // Skip files that can't be stat'd
-      }
-    }
+    const fileModTimes = await collectFileModificationTimes(
+      rootPath,
+      filePaths,
+      async (absolutePath) => fs.stat(absolutePath)
+    );
 
     this.cache.set(cacheKey, {
       groundingData,
@@ -635,18 +320,7 @@ export class AnalysisService {
   clearCacheForFile(filePath: string): void {
     // Remove entries from cache that include this file
     for (const [key, value] of this.cache.entries()) {
-      const normalizedInput = path.normalize(filePath);
-      const hasMatchingPath = Array.from(value.fileModTimes.keys()).some((cachedPath) => {
-        // Cache keys are relative paths; incoming file paths are often absolute.
-        if (path.normalize(cachedPath) === normalizedInput) {
-          return true;
-        }
-
-        const absoluteCachedPath = path.normalize(path.join(value.groundingData.rootPath, cachedPath));
-        return absoluteCachedPath === normalizedInput;
-      });
-
-      if (hasMatchingPath) {
+      if (cacheEntryMatchesFilePath(value.fileModTimes.keys(), value.groundingData.rootPath, filePath)) {
         this.cache.delete(key);
       }
     }
@@ -669,28 +343,15 @@ export class AnalysisService {
     }
 
     const now = Date.now();
-    if (now - this.lastProgressUpdate >= this.progressUpdateIntervalMs || percentage === 100) {
+    const nextTimestamp = getProgressUpdateTimestamp(
+      now,
+      this.lastProgressUpdate,
+      this.progressUpdateIntervalMs,
+      percentage
+    );
+    if (nextTimestamp !== null) {
       callback(percentage, message);
-      this.lastProgressUpdate = now;
-    }
-  }
-
-  /**
-   * Check if operation has been cancelled
-   */
-  private checkCancellation(token?: CancellationToken): void {
-    if (token && token.isCancelled) {
-      throw new CancellationError('Analysis was cancelled');
-    }
-  }
-
-  /**
-   * Check if operation has exceeded timeout
-   */
-  private checkTimeout(startTime: number, timeoutMs: number, phase: string): void {
-    const elapsed = Date.now() - startTime;
-    if (elapsed > timeoutMs) {
-      throw new TimeoutError(`Analysis timeout exceeded during ${phase} (${elapsed}ms > ${timeoutMs}ms)`);
+      this.lastProgressUpdate = nextTimestamp;
     }
   }
 
@@ -729,11 +390,5 @@ export class CancellationError extends Error {
  * Create a cancellation token
  */
 export function createCancellationToken(): CancellationToken {
-  const token = {
-    isCancelled: false,
-    cancel() {
-      this.isCancelled = true;
-    }
-  };
-  return token;
+  return buildCancellationTokenState();
 }

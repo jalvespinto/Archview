@@ -80,9 +80,7 @@ export class KiroAIService {
    * Attempts to access the Kiro AI API through multiple patterns
    */
   async initialize(): Promise<void> {
-    const result = await this.getKiroAI();
-    this.kiroAI = result.api;
-    this.isMock = result.isMock;
+    const { api, isMock } = await this.getKiroAI(); this.kiroAI = api; this.isMock = isMock;
   }
 
   /**
@@ -96,64 +94,22 @@ export class KiroAIService {
     grounding: GroundingData,
     tier: 1 | 2 | 3 = 1
   ): Promise<ArchitecturalModel> {
-    if (!this.kiroAI) {
-      await this.initialize();
-    }
-
-    // Check cache first
-    const cached = await this.cache.get(grounding, tier);
-    if (cached) {
-      return cached;
-    }
-
-    const startTime = Date.now();
-
+    if (!this.kiroAI) await this.initialize();
+    const cached = await this.cache.get(grounding, tier), startTime = Date.now();
+    if (cached) return cached;
     try {
-      // Build the prompt for the current tier
-      const prompt = this.buildPromptForTier(grounding, tier);
-
-      // Send to LLM
-      const response = await this.kiroAI!.sendMessage(prompt);
-
-      // Parse the response
-      const llmResponse = this.parseLLMResponse(response);
-
-      // Convert to ArchitecturalModel
-      const model = this.convertToArchitecturalModel(
-        llmResponse,
-        grounding,
-        tier,
-        Date.now() - startTime
-      );
-
-      // Store in cache
+      const llmResponse = this.parseLLMResponse(await this.kiroAI!.sendMessage(this.buildPromptForTier(grounding, tier)));
+      const model = this.convertToArchitecturalModel(llmResponse, grounding, tier, Date.now() - startTime);
       await this.cache.set(grounding, tier, model);
-
-      // Check if we need to enrich and retry
       if (model.metadata.confidence === 'low' && tier < 3) {
         const ambiguousFiles = this.extractAmbiguousFiles(llmResponse, grounding);
-        
-        if (ambiguousFiles.length > 0) {
-          const enriched = await this.enrichGrounding(
-            grounding,
-            ambiguousFiles,
-            (tier + 1) as 2 | 3
-          );
-          
-          return this.interpretArchitecture(enriched, (tier + 1) as 2 | 3);
-        }
+        if (ambiguousFiles.length > 0) return this.interpretArchitecture(await this.enrichGrounding(grounding, ambiguousFiles, (tier + 1) as 2 | 3), (tier + 1) as 2 | 3);
       }
-
       return model;
     } catch (error) {
-      // If LLM fails, fall back to heuristic interpretation
       console.warn('LLM interpretation failed, using heuristic fallback:', error);
-      
       const fallbackModel = this.buildHeuristicModel(grounding, Date.now() - startTime);
-      
-      // Store fallback in cache
       await this.cache.set(grounding, tier, fallbackModel);
-      
       return fallbackModel;
     }
   }
@@ -172,25 +128,8 @@ export class KiroAIService {
     ambiguousFilePaths: string[],
     targetTier: 2 | 3
   ): Promise<GroundingData> {
-    // Create a copy of the grounding data
-    const enriched: GroundingData = {
-      ...grounding,
-      files: [...grounding.files],
-    };
-
-    // Find files that need enrichment
-    const filesToEnrich = enriched.files.filter(file =>
-      ambiguousFilePaths.includes(file.path)
-    );
-
-    if (targetTier === 2) {
-      // Tier 2: Add function signatures and method lists
-      await this.enrichToTier2(filesToEnrich);
-    } else if (targetTier === 3) {
-      // Tier 3: Add first 50 lines of file content
-      await this.enrichToTier3(filesToEnrich, grounding.rootPath);
-    }
-
+    const enriched: GroundingData = { ...grounding, files: [...grounding.files] }, filesToEnrich = enriched.files.filter((file) => ambiguousFilePaths.includes(file.path));
+    await (targetTier === 2 ? this.enrichToTier2(filesToEnrich) : this.enrichToTier3(filesToEnrich, grounding.rootPath));
     return enriched;
   }
   /**
@@ -204,33 +143,12 @@ export class KiroAIService {
     llmResponse: LLMArchitectureResponse,
     grounding: GroundingData
   ): string[] {
-    // If LLM explicitly provided ambiguous files, use those
-    if (llmResponse.ambiguousFiles && llmResponse.ambiguousFiles.length > 0) {
-      return llmResponse.ambiguousFiles;
-    }
-
-    // Otherwise, heuristically identify files that might need more detail
-    // Look for files with generic names or minimal exports
-    const ambiguous: string[] = [];
-    const genericNames = ['util', 'helper', 'common', 'shared', 'index', 'main'];
-
+    if (llmResponse.ambiguousFiles && llmResponse.ambiguousFiles.length > 0) return llmResponse.ambiguousFiles;
+    const ambiguous: string[] = [], genericNames = ['util', 'helper', 'common', 'shared', 'index', 'main'];
     for (const file of grounding.files) {
-      const fileName = file.path.split('/').pop()?.toLowerCase() || '';
-      const baseName = fileName.replace(/\.[^.]+$/, '');
-
-      // Check if file has a generic name
-      const hasGenericName = genericNames.some(name => baseName.includes(name));
-
-      // Check if file has minimal exports (might need more context)
-      const hasMinimalExports = file.exports.length === 0 &&
-                                file.classes.length === 0 &&
-                                file.topLevelFunctions.length === 0;
-
-      if (hasGenericName || hasMinimalExports) {
-        ambiguous.push(file.path);
-      }
+      const baseName = (file.path.split('/').pop()?.toLowerCase() || '').replace(/\.[^.]+$/, '');
+      if (genericNames.some((name) => baseName.includes(name)) || (file.exports.length === 0 && file.classes.length === 0 && file.topLevelFunctions.length === 0)) ambiguous.push(file.path);
     }
-
     return ambiguous;
   }
 
@@ -240,43 +158,21 @@ export class KiroAIService {
    * @param files - Files to enrich
    */
   private async enrichToTier2(files: FileGroundingData[]): Promise<void> {
-    // Import ParserManager for re-parsing files
-    const { ParserManager } = await import('./ParserManager');
-    const parserManager = new ParserManager();
+    const parserManager = new (await import('./ParserManager')).ParserManager(), fs = await import('fs/promises');
     await parserManager.initialize();
-
-    const fs = await import('fs/promises');
     for (const file of files) {
       try {
-        // Read file content
-        const sourceCode = await fs.readFile(file.path, 'utf-8');
-
-        // Parse the file
-        const ast = await parserManager.parseFile(file.path, sourceCode, file.language);
-
-        // Extract function signatures for top-level functions
+        const sourceCode = await fs.readFile(file.path, 'utf-8'), ast = await parserManager.parseFile(file.path, sourceCode, file.language);
         for (const func of file.topLevelFunctions) {
-          if (!func.signature) {
-            func.signature = await this.extractFunctionSignature(
-              func.name,
-              ast,
-              sourceCode
-            );
-          }
+          if (!func.signature) func.signature = await this.extractFunctionSignature(func.name, ast, sourceCode);
         }
-
-        // Extract method lists for classes
         for (const cls of file.classes) {
-          if (!cls.methods || cls.methods.length === 0) {
-            cls.methods = await this.extractClassMethods(cls.name, ast, sourceCode);
-          }
+          if (!cls.methods || cls.methods.length === 0) cls.methods = await this.extractClassMethods(cls.name, ast, sourceCode);
         }
       } catch (error) {
         console.warn(`Failed to enrich file ${file.path} to Tier 2:`, error);
-        // Continue with other files
       }
     }
-
     parserManager.dispose();
   }
 
@@ -290,28 +186,12 @@ export class KiroAIService {
     files: FileGroundingData[],
     rootPath: string
   ): Promise<void> {
-    const fs = await import('fs/promises');
-    const path = await import('path');
-
+    const [fs, path] = await Promise.all([import('fs/promises'), import('path')]);
     for (const file of files) {
       try {
-        // Resolve absolute path
-        const absolutePath = path.isAbsolute(file.path)
-          ? file.path
-          : path.join(rootPath, file.path);
-
-        // Read file content
-        const sourceCode = await fs.readFile(absolutePath, 'utf-8');
-
-        // Get first 50 lines
-        const lines = sourceCode.split('\n').slice(0, 50);
-        const excerpt = lines.join('\n');
-
-        // Add excerpt to file data (extend the interface)
-        (file as FileGroundingDataWithExcerpt).contentExcerpt = excerpt;
+        (file as FileGroundingDataWithExcerpt).contentExcerpt = (await fs.readFile(path.isAbsolute(file.path) ? file.path : path.join(rootPath, file.path), 'utf-8')).split('\n').slice(0, 50).join('\n');
       } catch (error) {
         console.warn(`Failed to enrich file ${file.path} to Tier 3:`, error);
-        // Continue with other files
       }
     }
   }
@@ -324,22 +204,7 @@ export class KiroAIService {
    * @param sourceCode - Source code
    * @returns Function signature string
    */
-  private async extractFunctionSignature(
-    functionName: string,
-    _ast: unknown,
-    _sourceCode: string
-  ): Promise<string> {
-    try {
-      // This is a simplified implementation
-      // In a real implementation, we would traverse the AST to find the function
-      // and extract its parameters and return type
-
-      // For now, return a placeholder
-      return `${functionName}(...)`;
-    } catch (error) {
-      return `${functionName}(...)`;
-    }
-  }
+  private async extractFunctionSignature(functionName: string, _ast: unknown, _sourceCode: string): Promise<string> { return `${functionName}(...)`; }
 
   /**
    * Extract method names from a class in the AST
@@ -349,22 +214,7 @@ export class KiroAIService {
    * @param sourceCode - Source code
    * @returns Array of method names
    */
-  private async extractClassMethods(
-    _className: string,
-    _ast: unknown,
-    _sourceCode: string
-  ): Promise<string[]> {
-    try {
-      // This is a simplified implementation
-      // In a real implementation, we would traverse the AST to find the class
-      // and extract all its method names
-
-      // For now, return empty array
-      return [];
-    } catch (error) {
-      return [];
-    }
-  }
+  private async extractClassMethods(_className: string, _ast: unknown, _sourceCode: string): Promise<string[]> { return []; }
 
   /**
    * Build Tier 1 prompt from grounding data
@@ -433,28 +283,13 @@ Focus on:
    */
   private buildPromptForTier(grounding: GroundingData, tier: 1 | 2 | 3): string {
     let prompt = this.buildTier1Prompt(grounding);
-
-    if (tier >= 2) {
-      prompt += '\n\n--- TIER 2 ENRICHMENT ---\n';
-      prompt += 'Additional function signatures and method lists have been provided for ambiguous files.\n';
-    }
-
+    if (tier >= 2) prompt += '\n\n--- TIER 2 ENRICHMENT ---\nAdditional function signatures and method lists have been provided for ambiguous files.\n';
     if (tier === 3) {
-      prompt += '\n\n--- TIER 3 ENRICHMENT ---\n';
-      prompt += 'File content excerpts (first 50 lines) have been provided for critical files:\n\n';
-
-      // Add content excerpts for files that have them
+      prompt += '\n\n--- TIER 3 ENRICHMENT ---\nFile content excerpts (first 50 lines) have been provided for critical files:\n\n';
       for (const file of grounding.files) {
-        const excerpt = (file as FileGroundingDataWithExcerpt).contentExcerpt;
-        if (excerpt) {
-          prompt += `\nFile: ${file.path}\n`;
-          prompt += '```\n';
-          prompt += excerpt;
-          prompt += '\n```\n';
-        }
+        const excerpt = (file as FileGroundingDataWithExcerpt).contentExcerpt; if (excerpt) prompt += `\nFile: ${file.path}\n\`\`\`\n${excerpt}\n\`\`\`\n`;
       }
     }
-
     return prompt;
   }
 
@@ -467,35 +302,30 @@ Focus on:
    */
   private parseLLMResponse(response: string): LLMArchitectureResponse {
     try {
-      // If response is already an object, return it
-      if (typeof response === 'object') {
-        return response as LLMArchitectureResponse;
-      }
-
-      // Try to parse as JSON
-      const parsed = JSON.parse(response);
-      
-      // Validate required fields
-      if (!parsed.components || !Array.isArray(parsed.components)) {
-        throw new Error('Invalid response: missing or invalid components array');
-      }
-      if (!parsed.relationships || !Array.isArray(parsed.relationships)) {
-        throw new Error('Invalid response: missing or invalid relationships array');
-      }
-      if (!parsed.patterns || !Array.isArray(parsed.patterns)) {
-        throw new Error('Invalid response: missing or invalid patterns array');
-      }
-      if (!parsed.confidence || !['high', 'medium', 'low'].includes(parsed.confidence)) {
-        throw new Error('Invalid response: missing or invalid confidence level');
-      }
-
-      return parsed as LLMArchitectureResponse;
+      if (this.isLLMResponseObject(response)) return response;
+      const parsed = JSON.parse(response) as unknown; this.validateLLMResponse(parsed); return parsed;
     } catch (error) {
-      if (error instanceof SyntaxError) {
-        throw new Error(`Failed to parse LLM response as JSON: ${error.message}`);
-      }
-      throw error;
+      if (error instanceof SyntaxError) throw new Error(`Failed to parse LLM response as JSON: ${error.message}`); throw error;
     }
+  }
+
+  private isLLMResponseObject(response: unknown): response is LLMArchitectureResponse {
+    return typeof response === 'object' && response !== null;
+  }
+
+  private validateLLMResponse(parsed: unknown): asserts parsed is LLMArchitectureResponse {
+    if (!this.hasArrayField(parsed, 'components')) throw new Error('Invalid response: missing or invalid components array');
+    if (!this.hasArrayField(parsed, 'relationships')) throw new Error('Invalid response: missing or invalid relationships array');
+    if (!this.hasArrayField(parsed, 'patterns')) throw new Error('Invalid response: missing or invalid patterns array');
+    if (!this.hasValidConfidence(parsed)) throw new Error('Invalid response: missing or invalid confidence level');
+  }
+
+  private hasArrayField(parsed: unknown, field: 'components' | 'relationships' | 'patterns'): boolean {
+    return !!parsed && typeof parsed === 'object' && Array.isArray((parsed as Record<string, unknown>)[field]);
+  }
+
+  private hasValidConfidence(parsed: unknown): boolean {
+    return !!parsed && typeof parsed === 'object' && ['high', 'medium', 'low'].includes((parsed as { confidence?: unknown }).confidence as string);
   }
 
   /**
@@ -508,79 +338,30 @@ Focus on:
    * @param inferenceTimeMs - Time taken for LLM inference
    * @returns Complete ArchitecturalModel
    */
-  private convertToArchitecturalModel(
-    llmResponse: LLMArchitectureResponse,
-    grounding: GroundingData,
-    tier: 1 | 2 | 3,
-    inferenceTimeMs: number
-  ): ArchitecturalModel {
-    // Convert components
+  private convertToArchitecturalModel(llmResponse: LLMArchitectureResponse, grounding: GroundingData, tier: 1 | 2 | 3, inferenceTimeMs: number): ArchitecturalModel {
     const components: ArchitecturalComponent[] = llmResponse.components.map(comp => ({
-      id: comp.id,
-      name: comp.name,
-      description: comp.description,
-      role: comp.role,
-      filePaths: comp.filePaths,
-      abstractionLevel: this.mapAbstractionLevel(comp.abstractionLevel),
-      subComponents: comp.subComponents,
-      parent: comp.parent,
+      id: comp.id, name: comp.name, description: comp.description, role: comp.role, filePaths: comp.filePaths,
+      abstractionLevel: this.mapAbstractionLevel(comp.abstractionLevel), subComponents: comp.subComponents, parent: comp.parent,
     }));
-
-    // Convert relationships
     const relationships: ArchitecturalRelationship[] = llmResponse.relationships.map(rel => ({
-      id: rel.id,
-      sourceId: rel.sourceId,
-      targetId: rel.targetId,
-      type: this.mapRelationshipType(rel.type),
-      description: rel.description,
-      strength: rel.strength,
+      id: rel.id, sourceId: rel.sourceId, targetId: rel.targetId, type: this.mapRelationshipType(rel.type),
+      description: rel.description, strength: rel.strength,
     }));
-
-    // Build metadata
-    const metadata: ArchitecturalModelMetadata = {
-      llmInferenceTimeMs: inferenceTimeMs,
-      tierUsed: tier,
-      confidence: llmResponse.confidence,
-      filesAnalyzed: grounding.files.length,
-    };
-
-    return {
-      components,
-      relationships,
-      patterns: llmResponse.patterns,
-      metadata,
-    };
+    return { components, relationships, patterns: llmResponse.patterns, metadata: { llmInferenceTimeMs: inferenceTimeMs, tierUsed: tier, confidence: llmResponse.confidence, filesAnalyzed: grounding.files.length } };
   }
 
   /**
    * Map numeric abstraction level to enum
    */
   private mapAbstractionLevel(level: number): AbstractionLevel {
-    switch (level) {
-      case 1:
-        return AbstractionLevel.Overview;
-      case 2:
-        return AbstractionLevel.Module;
-      case 3:
-        return AbstractionLevel.Detailed;
-      default:
-        return AbstractionLevel.Overview;
-    }
+    return ({ 1: AbstractionLevel.Overview, 2: AbstractionLevel.Module, 3: AbstractionLevel.Detailed } as Record<number, AbstractionLevel>)[level] ?? AbstractionLevel.Overview;
   }
 
   /**
    * Map string relationship type to enum
    */
   private mapRelationshipType(type: string): RelationshipType {
-    const typeMap: Record<string, RelationshipType> = {
-      import: RelationshipType.Import,
-      dependency: RelationshipType.Dependency,
-      inheritance: RelationshipType.Inheritance,
-      composition: RelationshipType.Composition,
-      function_call: RelationshipType.FunctionCall,
-    };
-
-    return typeMap[type.toLowerCase()] || RelationshipType.Dependency;
+    return ({ import: RelationshipType.Import, dependency: RelationshipType.Dependency, inheritance: RelationshipType.Inheritance, composition: RelationshipType.Composition, function_call: RelationshipType.FunctionCall } as Record<string, RelationshipType>)[type.toLowerCase()] ?? RelationshipType.Dependency;
   }
 
   /**
@@ -591,75 +372,53 @@ Focus on:
    * @param inferenceTimeMs - Time taken (for consistency with LLM path)
    * @returns Heuristic architectural model with low confidence
    */
-  public buildHeuristicModel(
-      grounding: GroundingData,
-      inferenceTimeMs: number
-    ): ArchitecturalModel {
-      const components: ArchitecturalComponent[] = [];
-      const relationships: ArchitecturalRelationship[] = [];
+  public buildHeuristicModel(grounding: GroundingData, inferenceTimeMs: number): ArchitecturalModel {
+    const components = this.createHeuristicComponents(grounding);
+    return { components, relationships: this.deriveHeuristicRelationships(grounding, components), patterns: [], metadata: this.createHeuristicMetadata(grounding, inferenceTimeMs) };
+  }
 
-      // Group files by top-level directory
-      const directoryGroups = this.groupFilesByTopLevelDirectory(grounding);
-
-      // Create components from directory groups
-      for (const [dirPath, files] of directoryGroups.entries()) {
-        const dirName = dirPath.split('/').pop() || dirPath;
-        const componentId = this.sanitizeId(dirPath);
-
-        components.push({
-          id: componentId,
-          name: this.formatComponentName(dirName),
-          description: `Component containing files from ${dirPath}`,
-          role: 'module',
-          filePaths: files.map(f => f.path),
-          abstractionLevel: AbstractionLevel.Overview,
-          subComponents: [],
-          parent: null,
-        });
-      }
-
-      // Derive relationships from import graph
-      const componentMap = this.buildFileToComponentMap(components);
-      const relationshipSet = new Set<string>();
-
-      for (const importEdge of grounding.importGraph) {
-        const sourceComponent = componentMap.get(importEdge.sourceFile);
-        const targetComponent = componentMap.get(importEdge.targetFile);
-
-        // Only create relationships between different components
-        if (sourceComponent && targetComponent && sourceComponent !== targetComponent) {
-          const relId = `${sourceComponent}->${targetComponent}`;
-
-          // Avoid duplicate relationships
-          if (!relationshipSet.has(relId)) {
-            relationshipSet.add(relId);
-
-            relationships.push({
-              id: this.sanitizeId(relId),
-              sourceId: sourceComponent,
-              targetId: targetComponent,
-              type: RelationshipType.Import,
-              description: `Import dependency from ${sourceComponent} to ${targetComponent}`,
-              strength: 0.5, // Medium strength for heuristic relationships
-            });
-          }
-        }
-      }
-
-      const metadata: ArchitecturalModelMetadata = {
-        llmInferenceTimeMs: inferenceTimeMs,
-        tierUsed: 1,
-        confidence: 'low', // Always low confidence for heuristic models
-        filesAnalyzed: grounding.files.length,
-      };
-
-      return {
-        components,
-        relationships,
-        patterns: [], // No pattern detection in heuristic mode
-        metadata,
-      };
+  private createHeuristicComponents(grounding: GroundingData): ArchitecturalComponent[] {
+    const components: ArchitecturalComponent[] = [], directoryGroups = this.groupFilesByTopLevelDirectory(grounding);
+    for (const [dirPath, files] of directoryGroups.entries()) {
+      components.push({
+        id: this.sanitizeId(dirPath), name: this.formatComponentName(dirPath.split('/').pop() || dirPath),
+        description: `Component containing files from ${dirPath}`, role: 'module', filePaths: files.map((f) => f.path),
+        abstractionLevel: AbstractionLevel.Overview, subComponents: [], parent: null,
+      });
     }
+    return components;
+  }
+
+  private deriveHeuristicRelationships(grounding: GroundingData, components: ArchitecturalComponent[]): ArchitecturalRelationship[] {
+    const relationships: ArchitecturalRelationship[] = [], componentMap = this.buildFileToComponentMap(components), relationshipSet = new Set<string>();
+    for (const importEdge of grounding.importGraph) {
+      const sourceComponent = componentMap.get(importEdge.sourceFile), targetComponent = componentMap.get(importEdge.targetFile);
+      const relId = this.getHeuristicRelationshipId(sourceComponent, targetComponent);
+      if (!sourceComponent || !targetComponent || !relId || relationshipSet.has(relId)) continue;
+      relationshipSet.add(relId);
+      relationships.push(this.createHeuristicImportRelationship(relId, sourceComponent, targetComponent));
+    }
+    return relationships;
+  }
+
+  private getHeuristicRelationshipId(sourceComponent: string | undefined, targetComponent: string | undefined): string | undefined {
+    return !sourceComponent || !targetComponent || sourceComponent === targetComponent ? undefined : `${sourceComponent}->${targetComponent}`;
+  }
+
+  private createHeuristicImportRelationship(
+    relId: string,
+    sourceId: string,
+    targetId: string
+  ): ArchitecturalRelationship {
+    return { id: this.sanitizeId(relId), sourceId, targetId, type: RelationshipType.Import, description: `Import dependency from ${sourceId} to ${targetId}`, strength: 0.5 };
+  }
+
+  private createHeuristicMetadata(
+    grounding: GroundingData,
+    inferenceTimeMs: number
+  ): ArchitecturalModelMetadata {
+    return { llmInferenceTimeMs: inferenceTimeMs, tierUsed: 1, confidence: 'low', filesAnalyzed: grounding.files.length };
+  }
 
   /**
    * Group files by their top-level directory
@@ -667,22 +426,12 @@ Focus on:
    * @param grounding - The grounding data
    * @returns Map of directory path to files in that directory
    */
-  private groupFilesByTopLevelDirectory(
-    grounding: GroundingData
-  ): Map<string, FileGroundingData[]> {
+  private groupFilesByTopLevelDirectory(grounding: GroundingData): Map<string, FileGroundingData[]> {
     const groups = new Map<string, FileGroundingData[]>();
-    
     for (const file of grounding.files) {
-      // Get top-level directory from file path
       const topLevelDir = this.getTopLevelDirectory(file.path, grounding.rootPath);
-      
-      if (!groups.has(topLevelDir)) {
-        groups.set(topLevelDir, []);
-      }
-      
-      groups.get(topLevelDir)!.push(file);
+      groups.set(topLevelDir, [...(groups.get(topLevelDir) ?? []), file]);
     }
-    
     return groups;
   }
 
@@ -694,23 +443,8 @@ Focus on:
    * @returns The top-level directory path
    */
   private getTopLevelDirectory(filePath: string, rootPath: string): string {
-    // Remove root path if present
-    let relativePath = filePath;
-    if (filePath.startsWith(rootPath)) {
-      relativePath = filePath.substring(rootPath.length);
-    }
-    
-    // Remove leading slash
-    relativePath = relativePath.replace(/^\/+/, '');
-    
-    // Get first directory component
-    const parts = relativePath.split('/');
-    if (parts.length > 1) {
-      return parts[0];
-    }
-    
-    // File is in root directory
-    return '.';
+    const normalizedPath = (filePath.startsWith(rootPath) ? filePath.substring(rootPath.length) : filePath).replace(/^\/+/, ''), separatorIndex = normalizedPath.indexOf('/');
+    return separatorIndex >= 0 ? normalizedPath.substring(0, separatorIndex) : '.';
   }
 
   /**
@@ -719,17 +453,9 @@ Focus on:
    * @param components - The components
    * @returns Map of file path to component ID
    */
-  private buildFileToComponentMap(
-    components: ArchitecturalComponent[]
-  ): Map<string, string> {
+  private buildFileToComponentMap(components: ArchitecturalComponent[]): Map<string, string> {
     const map = new Map<string, string>();
-    
-    for (const component of components) {
-      for (const filePath of component.filePaths) {
-        map.set(filePath, component.id);
-      }
-    }
-    
+    for (const component of components) for (const filePath of component.filePaths) map.set(filePath, component.id);
     return map;
   }
 
@@ -741,19 +467,8 @@ Focus on:
    * @returns Formatted component name
    */
   private formatComponentName(dirName: string): string {
-    // Handle special cases
-    if (dirName === '.') {
-      return 'Root';
-    }
-    
-    // Convert kebab-case and snake_case to spaces
-    const withSpaces = dirName.replace(/[-_]/g, ' ');
-    
-    // Capitalize first letter of each word
-    return withSpaces
-      .split(' ')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-      .join(' ');
+    if (dirName === '.') return 'Root';
+    return dirName.replace(/[-_]/g, ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
   }
 
   /**
@@ -764,11 +479,7 @@ Focus on:
    * @returns Sanitized ID string
    */
   private sanitizeId(str: string): string {
-    return str
-      .replace(/[^a-zA-Z0-9-_]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '')
-      .toLowerCase();
+    return str.replace(/[^a-zA-Z0-9-_]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase();
   }
 
   /**
@@ -778,32 +489,18 @@ Focus on:
    * @returns KiroAI instance and whether it's a mock
    */
   private async getKiroAI(): Promise<KiroAIResult> {
-    // Pattern 1: Try importing kiro module
     try {
-      const kiro = await import('kiro');
-      const typedKiro = kiro as KiroImport;
-      if (typedKiro.ai) {
-        return { api: typedKiro.ai, isMock: false };
-      }
-    } catch (error) {
-      // Import failed, try other methods
+      const importedKiro = (await import('kiro')) as KiroImport;
+      if (importedKiro.ai) return { api: importedKiro.ai, isMock: false };
+    } catch {
+      // Continue with global and stub discovery paths.
     }
-
-    // Pattern 2: Check for global kiro object
     const globalKiro = (globalThis as GlobalWithKiro).kiro;
-    if (globalKiro?.ai) {
-      return { api: globalKiro.ai, isMock: false };
-    }
-
-    // Pattern 3: Fall back to mock for testing
+    if (globalKiro?.ai) return { api: globalKiro.ai, isMock: false };
     try {
-      const { getKiroAI } = await import('../spike/kiro-api-stub');
-      const result = await getKiroAI();
-      return result;
-    } catch (error) {
-      throw new Error(
-        'Kiro AI API not available. Tried import, global object, and mock fallback.'
-      );
+      return await (await import('../spike/kiro-api-stub')).getKiroAI();
+    } catch {
+      throw new Error('Kiro AI API not available. Tried import, global object, and mock fallback.');
     }
   }
 
@@ -811,14 +508,10 @@ Focus on:
    * Clear the cache
    * Useful when files change or for testing
    */
-  clearCache(): void {
-    this.cache.clear();
-  }
+  clearCache(): void { this.cache.clear(); }
 
   /**
    * Get cache statistics
    */
-  getCacheStats(): { size: number; maxSize: number } {
-    return this.cache.getStats();
-  }
+  getCacheStats(): { size: number; maxSize: number } { return this.cache.getStats(); }
 }

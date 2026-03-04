@@ -60,7 +60,7 @@ export interface ICancellationToken {
 export class ProgressReporter {
   private progressNotifier: IProgressNotifier;
   private lastUpdateTime: number = 0;
-  private readonly UPDATE_INTERVAL_MS = 5000; // 5 seconds (Requirement 10.3)
+  private readonly updateIntervalMs = 5000; // 5 seconds (Requirement 10.3)
 
   constructor(progressNotifier: IProgressNotifier) {
     this.progressNotifier = progressNotifier;
@@ -83,12 +83,12 @@ export class ProgressReporter {
         let lastPercentage = 0;
         this.lastUpdateTime = Date.now();
 
-        const progressCallback = (percentage: number, message: string) => {
+        const progressCallback = (percentage: number, message: string): void => {
           const now = Date.now();
           const timeSinceLastUpdate = now - this.lastUpdateTime;
 
           // Update progress every 5 seconds or when percentage changes significantly
-          if (timeSinceLastUpdate >= this.UPDATE_INTERVAL_MS || percentage - lastPercentage >= 10 || percentage === 100) {
+          if (timeSinceLastUpdate >= this.updateIntervalMs || percentage - lastPercentage >= 10 || percentage === 100) {
             const increment = percentage - lastPercentage;
             progress.report({ increment, message });
             lastPercentage = percentage;
@@ -118,12 +118,12 @@ export class ProgressReporter {
         let lastPercentage = 0;
         this.lastUpdateTime = Date.now();
 
-        const progressCallback = (percentage: number, message: string) => {
+        const progressCallback = (percentage: number, message: string): void => {
           const now = Date.now();
           const timeSinceLastUpdate = now - this.lastUpdateTime;
 
           // Update progress every 5 seconds or when percentage changes significantly
-          if (timeSinceLastUpdate >= this.UPDATE_INTERVAL_MS || percentage - lastPercentage >= 10 || percentage === 100) {
+          if (timeSinceLastUpdate >= this.updateIntervalMs || percentage - lastPercentage >= 10 || percentage === 100) {
             const increment = percentage - lastPercentage;
             progress.report({ increment, message });
             lastPercentage = percentage;
@@ -157,12 +157,12 @@ export class ProgressReporter {
         let lastPercentage = 0;
         this.lastUpdateTime = Date.now();
 
-        const progressCallback = (percentage: number, message: string) => {
+        const progressCallback = (percentage: number, message: string): void => {
           const now = Date.now();
           const timeSinceLastUpdate = now - this.lastUpdateTime;
 
           // Update progress every 5 seconds or when percentage changes significantly
-          if (timeSinceLastUpdate >= this.UPDATE_INTERVAL_MS || percentage - lastPercentage >= 10 || percentage === 100) {
+          if (timeSinceLastUpdate >= this.updateIntervalMs || percentage - lastPercentage >= 10 || percentage === 100) {
             const increment = percentage - lastPercentage;
             progress.report({ increment, message });
             lastPercentage = percentage;
@@ -218,7 +218,7 @@ export class MockProgressNotifier implements IProgressNotifier {
   /**
    * Simulate cancellation
    */
-  cancel() {
+  cancel(): void {
     this._cancelled = true;
     // Notify all listeners
     this.cancellationListeners.forEach(listener => listener());
@@ -227,7 +227,7 @@ export class MockProgressNotifier implements IProgressNotifier {
   /**
    * Reset mock state
    */
-  reset() {
+  reset(): void {
     this.progressUpdates = [];
     this._cancelled = false;
     this.cancellationListeners = [];

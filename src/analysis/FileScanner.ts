@@ -11,6 +11,7 @@
  */
 
 import * as fs from 'fs/promises';
+import type { Dirent } from 'fs';
 import * as path from 'path';
 import { minimatch } from 'minimatch';
 import { Language } from '../types';
@@ -173,89 +174,120 @@ export class FileScanner {
     excludePatterns: string[],
     result: ScanResult
   ): Promise<void> {
-    // Check depth limit
-    if (depth > options.maxDepth) {
-      result.maxDepthReached = true;
+    if (this.hasExceededMaxDepth(depth, options, result) || this.hasReachedMaxFiles(options, result)) {
       return;
     }
-    
-    // Check file count limit
-    if (result.files.length >= options.maxFiles) {
+
+    const entries = await this.readDirectoryEntries(currentPath);
+    if (!entries) {
       return;
     }
-    
-    let entries;
-    try {
-      entries = await fs.readdir(currentPath, { withFileTypes: true });
-    } catch (error) {
-      // Directory not accessible - skip it
-      return;
-    }
-    
+
     for (const entry of entries) {
       const fullPath = path.join(currentPath, entry.name);
       const relativePath = path.relative(rootPath, fullPath);
-      
-      // Check if path should be excluded (check early for directories)
-      if (this.shouldExclude(relativePath, excludePatterns)) {
-        if (entry.isFile()) {
-          result.totalFiles++;
-        }
-        result.skippedFiles++;
+
+      if (this.shouldSkipEntry(entry, relativePath, options, excludePatterns, result)) {
         continue;
       }
-      
-      // Check gitignore patterns (check early for directories)
-      if (options.respectGitignore && this.isGitignored(relativePath)) {
-        if (entry.isFile()) {
-          result.totalFiles++;
-        }
-        result.skippedFiles++;
-        continue;
-      }
-      
+
       if (entry.isDirectory()) {
-        // Recursively scan subdirectory
-        await this.scanDirectory(
-          rootPath,
-          fullPath,
-          depth + 1,
-          options,
-          excludePatterns,
-          result
-        );
-      } else if (entry.isFile()) {
-        result.totalFiles++;
-        
-        // Detect language
-        const language = this.detectLanguage(entry.name);
-        
-        // Check if language is supported
-        if (language === Language.Unknown) {
-          result.skippedFiles++;
-          continue;
-        }
-        
-        // Check include patterns
-        if (!this.shouldInclude(relativePath, options.includePatterns)) {
-          result.skippedFiles++;
-          continue;
-        }
-        
-        // Check file count limit
-        if (result.files.length >= options.maxFiles) {
-          return;
-        }
-        
-        // Add file to results
-        result.files.push({
-          path: relativePath,
-          absolutePath: fullPath,
-          language,
-          depth,
-        });
+        await this.scanDirectory(rootPath, fullPath, depth + 1, options, excludePatterns, result);
+        continue;
+      }
+
+      if (!entry.isFile()) {
+        continue;
+      }
+
+      const shouldStopScan = this.processScannedFile(entry.name, relativePath, fullPath, depth, options, result);
+      if (shouldStopScan) {
+        return;
       }
     }
+  }
+
+  private hasExceededMaxDepth(depth: number, options: ScanOptions, result: ScanResult): boolean {
+    if (depth <= options.maxDepth) {
+      return false;
+    }
+
+    result.maxDepthReached = true;
+    return true;
+  }
+
+  private hasReachedMaxFiles(options: ScanOptions, result: ScanResult): boolean {
+    return result.files.length >= options.maxFiles;
+  }
+
+  private async readDirectoryEntries(currentPath: string): Promise<Dirent[] | undefined> {
+    try {
+      return await fs.readdir(currentPath, { withFileTypes: true });
+    } catch (error) {
+      // Directory not accessible - skip it
+      return undefined;
+    }
+  }
+
+  private shouldSkipEntry(
+    entry: Dirent,
+    relativePath: string,
+    options: ScanOptions,
+    excludePatterns: string[],
+    result: ScanResult
+  ): boolean {
+    if (this.shouldExclude(relativePath, excludePatterns)) {
+      this.markSkippedEntry(entry, result);
+      return true;
+    }
+
+    if (options.respectGitignore && this.isGitignored(relativePath)) {
+      this.markSkippedEntry(entry, result);
+      return true;
+    }
+
+    return false;
+  }
+
+  private markSkippedEntry(entry: Dirent, result: ScanResult): void {
+    if (entry.isFile()) {
+      result.totalFiles++;
+    }
+    result.skippedFiles++;
+  }
+
+  private processScannedFile(
+    fileName: string,
+    relativePath: string,
+    fullPath: string,
+    depth: number,
+    options: ScanOptions,
+    result: ScanResult
+  ): boolean {
+    result.totalFiles++;
+
+    const language = this.detectLanguage(fileName);
+    if (language === Language.Unknown) {
+      result.skippedFiles++;
+      return false;
+    }
+
+    if (!this.shouldInclude(relativePath, options.includePatterns)) {
+      result.skippedFiles++;
+      return false;
+    }
+
+    if (this.hasReachedMaxFiles(options, result)) {
+      return true;
+    }
+
+    result.files.push({
+      path: relativePath,
+      absolutePath: fullPath,
+      language,
+      depth,
+    });
+    return false;
   }
   
   /**

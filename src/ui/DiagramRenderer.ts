@@ -11,6 +11,11 @@ import cytoscape, { Core, NodeSingular, LayoutOptions } from 'cytoscape';
 // @ts-expect-error - cytoscape-dagre doesn't have type definitions
 import dagre from 'cytoscape-dagre';
 import { DiagramData } from '../types';
+import { createDiagramCytoscapeOptions } from './diagramCytoscapeConfig';
+import { setupDiagramEventHandlers } from './diagramEventHandlers';
+import { getBreadthfirstLayoutOptions, getCoseLayoutOptions, getDagreLayoutOptions } from './diagramLayoutOptions';
+import { toCytoscapeEdgeElement, toCytoscapeNodeElement } from './diagramElementConverters';
+import { hideNodeTooltip, showNodeTooltip } from './diagramTooltip';
 
 // Register dagre layout
 cytoscape.use(dagre);
@@ -32,7 +37,7 @@ export class DiagramRenderer {
   private selectedElementId: string | null = null;
   private zoomDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private panDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly DEBOUNCE_DELAY_MS = 100; // 100ms debounce
+  private readonly debounceDelayMs = 100; // 100ms debounce
 
   /**
    * Initialize Cytoscape instance in browser DOM
@@ -40,21 +45,8 @@ export class DiagramRenderer {
    */
   initialize(container: BrowserHTMLElement): void {
     this.container = container;
-    
-    this.cy = cytoscape({
-      container,
-      style: this.getDefaultStyles() as cytoscape.StylesheetJson,
-      minZoom: 0.25,
-      maxZoom: 4.0,
-      wheelSensitivity: 0.2,
-      // Performance optimizations (Requirements: 2.7)
-      hideEdgesOnViewport: true,      // Hide edges during viewport changes
-      textureOnViewport: true,         // Use texture during viewport changes
-      motionBlur: false,               // Disable motion blur for performance
-      pixelRatio: 'auto',
-      // Enable virtualization for large graphs (Requirements: 2.7)
-      hideLabelsOnViewport: true       // Hide labels during pan/zoom
-    });
+
+    this.cy = cytoscape(createDiagramCytoscapeOptions(container));
 
     // Set up event handlers
     this.setupEventHandlers();
@@ -107,39 +99,11 @@ export class DiagramRenderer {
     let layoutOptions: LayoutOptions;
 
     if (algorithm === 'dagre') {
-      // Dagre hierarchical layout for architecture diagrams
-      layoutOptions = {
-        name: 'dagre',
-        // @ts-expect-error - dagre-specific options
-        rankDir: 'TB', // Top to bottom
-        nodeSep: 50,
-        edgeSep: 10,
-        rankSep: 100,
-        animate: true,
-        animationDuration: 500,
-        fit: true,
-        padding: 30
-      };
+      layoutOptions = getDagreLayoutOptions();
     } else if (algorithm === 'cose') {
-      layoutOptions = {
-        name: 'cose',
-        animate: true,
-        animationDuration: 500,
-        nodeRepulsion: 8000,
-        idealEdgeLength: 100,
-        fit: true,
-        padding: 30
-      };
+      layoutOptions = getCoseLayoutOptions();
     } else {
-      layoutOptions = {
-        name: 'breadthfirst',
-        directed: true,
-        spacingFactor: 1.5,
-        animate: true,
-        animationDuration: 500,
-        fit: true,
-        padding: 30
-      };
+      layoutOptions = getBreadthfirstLayoutOptions();
     }
 
     const layout = this.cy.layout(layoutOptions);
@@ -175,7 +139,7 @@ export class DiagramRenderer {
           }
         });
       });
-    }, this.DEBOUNCE_DELAY_MS);
+    }, this.debounceDelayMs);
   }
 
   /**
@@ -207,7 +171,7 @@ export class DiagramRenderer {
           }
         });
       });
-    }, this.DEBOUNCE_DELAY_MS);
+    }, this.debounceDelayMs);
   }
 
   /**
@@ -435,108 +399,15 @@ export class DiagramRenderer {
 
     // Add nodes
     for (const node of data.nodes) {
-      elements.push({
-        group: 'nodes',
-        data: {
-          id: node.id,
-          label: node.label,
-          type: node.type,
-          language: node.language,
-          filePaths: node.filePaths,
-          fileCount: node.filePaths.length
-        },
-        style: {
-          'background-color': node.style.color,
-          'shape': node.style.shape,
-          'width': node.style.size,
-          'height': node.style.size,
-          'border-width': node.style.borderWidth,
-          'border-color': '#333'
-        },
-        position: node.position
-      });
+      elements.push(toCytoscapeNodeElement(node));
     }
 
     // Add edges
     for (const edge of data.edges) {
-      elements.push({
-        group: 'edges',
-        data: {
-          id: edge.id,
-          source: edge.source,
-          target: edge.target,
-          type: edge.type
-        },
-        style: {
-          'line-color': edge.style.color,
-          'width': edge.style.width,
-          'line-style': edge.style.lineStyle,
-          'target-arrow-shape': edge.style.arrow ? 'triangle' : 'none',
-          'target-arrow-color': edge.style.color,
-          'curve-style': 'bezier'
-        }
-      });
+      elements.push(toCytoscapeEdgeElement(edge));
     }
 
     return elements;
-  }
-
-  /**
-   * Get default Cytoscape styles
-   * Requirements: 2.7, 5.3
-   */
-  private getDefaultStyles() {
-    return [
-      {
-        selector: 'node',
-        style: {
-          'label': 'data(label)',
-          'text-valign': 'center',
-          'text-halign': 'center',
-          'font-size': '12px',
-          'font-family': 'Arial, sans-serif',
-          'text-wrap': 'wrap',
-          'text-max-width': '100px',
-          'color': '#000',
-          'text-outline-color': '#fff',
-          'text-outline-width': 2,
-          'min-zoomed-font-size': 8
-        }
-      },
-      {
-        selector: 'node.selected',
-        style: {
-          'border-width': 4,
-          'border-color': '#0066cc',
-          'background-color': '#e6f2ff'
-        }
-      },
-      {
-        selector: 'node:active',
-        style: {
-          'overlay-opacity': 0.2,
-          'overlay-color': '#0066cc'
-        }
-      },
-      {
-        selector: 'edge',
-        style: {
-          'curve-style': 'bezier',
-          'target-arrow-shape': 'triangle',
-          'arrow-scale': 1.5,
-          'opacity': 0.7
-        }
-      },
-      {
-        selector: 'edge.selected',
-        style: {
-          'width': 3,
-          'opacity': 1,
-          'line-color': '#0066cc',
-          'target-arrow-color': '#0066cc'
-        }
-      }
-    ];
   }
 
   /**
@@ -545,43 +416,12 @@ export class DiagramRenderer {
    */
   private setupEventHandlers(): void {
     if (!this.cy) return;
-
-    // Click on node
-    this.cy.on('tap', 'node', (event) => {
-      const node = event.target as NodeSingular;
-      const elementId = node.id();
-      
-      if (this.onElementClickHandler) {
-        this.onElementClickHandler(elementId);
-      }
-    });
-
-    // Hover on node - show tooltip
-    this.cy.on('mouseover', 'node', (event) => {
-      const node = event.target as NodeSingular;
-      const elementId = node.id();
-      
-      // Show tooltip
-      this.showTooltip(node);
-      
-      if (this.onElementHoverHandler) {
-        this.onElementHoverHandler(elementId);
-      }
-    });
-
-    // Mouse out - hide tooltip
-    this.cy.on('mouseout', 'node', () => {
-      this.hideTooltip();
-    });
-
-    // Click on background - clear selection
-    this.cy.on('tap', (event) => {
-      if (event.target === this.cy) {
-        this.clearSelection();
-        if (this.onElementClickHandler) {
-          this.onElementClickHandler('');
-        }
-      }
+    setupDiagramEventHandlers(this.cy, {
+      clearSelection: () => this.clearSelection(),
+      getOnElementClickHandler: () => this.onElementClickHandler,
+      getOnElementHoverHandler: () => this.onElementHoverHandler,
+      hideTooltip: () => this.hideTooltip(),
+      showTooltip: (node) => this.showTooltip(node)
     });
   }
 
@@ -591,40 +431,7 @@ export class DiagramRenderer {
    */
   private showTooltip(node: NodeSingular): void {
     if (!this.container) return;
-
-    const data = node.data();
-    const position = node.renderedPosition();
-    
-    // Create or get tooltip element
-    let tooltip = this.container.querySelector('.diagram-tooltip') as BrowserHTMLElement;
-    if (!tooltip) {
-      tooltip = document.createElement('div');
-      tooltip.className = 'diagram-tooltip';
-      tooltip.style.position = 'absolute';
-      tooltip.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
-      tooltip.style.color = '#fff';
-      tooltip.style.padding = '8px 12px';
-      tooltip.style.borderRadius = '4px';
-      tooltip.style.fontSize = '12px';
-      tooltip.style.pointerEvents = 'none';
-      tooltip.style.zIndex = '1000';
-      tooltip.style.maxWidth = '200px';
-      this.container.appendChild(tooltip);
-    }
-
-    // Set tooltip content
-    const fileCount = data.fileCount || data.filePaths?.length || 0;
-    tooltip.innerHTML = `
-      <div><strong>${data.label}</strong></div>
-      <div>Type: ${data.type}</div>
-      <div>Files: ${fileCount}</div>
-      ${data.language ? `<div>Language: ${data.language}</div>` : ''}
-    `;
-
-    // Position tooltip
-    tooltip.style.left = `${position.x + 10}px`;
-    tooltip.style.top = `${position.y - 10}px`;
-    tooltip.style.display = 'block';
+    showNodeTooltip(this.container, node, document);
   }
 
   /**
@@ -632,10 +439,6 @@ export class DiagramRenderer {
    */
   private hideTooltip(): void {
     if (!this.container) return;
-    
-    const tooltip = this.container.querySelector('.diagram-tooltip') as BrowserHTMLElement;
-    if (tooltip) {
-      tooltip.style.display = 'none';
-    }
+    hideNodeTooltip(this.container);
   }
 }

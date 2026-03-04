@@ -7,6 +7,8 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import { DiagramData, WebviewMessage, AbstractionLevel } from '../types';
+import { webviewInlineScript } from './webviewInlineScript';
+import { webviewFeedbackStyles, webviewTooltipStyles } from './webviewStyles';
 
 /**
  * WebviewManager handles webview lifecycle and communication
@@ -198,14 +200,26 @@ export class WebviewManager {
    * For now, returns inline HTML with embedded styles and script
    */
   getWebviewContent(): string {
-      // Generate nonce for CSP
-      const nonce = this.generateNonce();
+    const nonce = this.generateNonce();
 
-      // TODO: Load from bundled webview assets (index.html, styles.css, webview.js)
-      // For now, return inline HTML
-      return `<!DOCTYPE html>
+    // TODO: Load from bundled webview assets (index.html, styles.css, webview.js)
+    // For now, return inline HTML
+    return `<!DOCTYPE html>
   <html lang="en">
-  <head>
+  ${this.getWebviewHead(nonce)}
+  <body>
+    <div id="diagram-container"></div>
+    ${this.getWebviewControls()}
+    ${this.getWebviewStatusOverlays()}
+    <script nonce="${nonce}">
+      ${this.getInlineScript()}
+    </script>
+  </body>
+  </html>`;
+  }
+
+  private getWebviewHead(nonce: string): string {
+    return `<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
@@ -213,10 +227,11 @@ export class WebviewManager {
     <style nonce="${nonce}">
       ${this.getInlineStyles()}
     </style>
-  </head>
-  <body>
-    <div id="diagram-container"></div>
-    <div id="controls">
+  </head>`;
+  }
+
+  private getWebviewControls(): string {
+    return `<div id="controls">
       <div class="control-group">
         <label>Zoom</label>
         <button id="zoom-in" title="Zoom In">+</button>
@@ -239,20 +254,18 @@ export class WebviewManager {
       <div class="control-group">
         <button id="refresh" title="Refresh Diagram">Refresh</button>
       </div>
-    </div>
-    <div id="loading" style="display: none;">
+    </div>`;
+  }
+
+  private getWebviewStatusOverlays(): string {
+    return `<div id="loading" style="display: none;">
       <div class="spinner"></div>
       <p>Loading diagram...</p>
     </div>
     <div id="error" style="display: none;">
       <p class="error-message"></p>
-    </div>
-    <script nonce="${nonce}">
-      ${this.getInlineScript()}
-    </script>
-  </body>
-  </html>`;
-    }
+    </div>`;
+  }
   /**
    * Generate a cryptographically secure nonce for CSP
    */
@@ -265,6 +278,15 @@ export class WebviewManager {
    */
   private getInlineStyles(): string {
     // Inline version of styles.css
+    return [
+      this.getLayoutStyles(),
+      this.getControlStyles(),
+      this.getFeedbackStyles(),
+      this.getTooltipStyles()
+    ].join('\n');
+  }
+
+  private getLayoutStyles(): string {
     return `
       * { box-sizing: border-box; }
       body {
@@ -291,6 +313,15 @@ export class WebviewManager {
         z-index: 1000;
         min-width: 160px;
       }
+    `;
+  }
+
+  private getControlStyles(): string {
+    return [this.getControlGroupStyles(), this.getControlInputStyles()].join('\n');
+  }
+
+  private getControlGroupStyles(): string {
+    return `
       .control-group {
         margin-bottom: 12px;
       }
@@ -326,6 +357,11 @@ export class WebviewManager {
         background: #e8e8e8;
         transform: translateY(1px);
       }
+    `;
+  }
+
+  private getControlInputStyles(): string {
+    return `
       #zoom-in, #zoom-out {
         width: 36px;
         padding: 8px;
@@ -357,120 +393,21 @@ export class WebviewManager {
       #refresh:hover {
         background: #0052a3;
       }
-      #loading {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        text-align: center;
-        z-index: 2000;
-        background: rgba(255, 255, 255, 0.95);
-        padding: 30px 40px;
-        border-radius: 8px;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-      }
-      .spinner {
-        width: 40px;
-        height: 40px;
-        margin: 0 auto 16px;
-        border: 4px solid #f3f3f3;
-        border-top: 4px solid #0066cc;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-      }
-      @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-      }
-      #error {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        text-align: center;
-        z-index: 2000;
-        background: #fff;
-        padding: 30px 40px;
-        border-radius: 8px;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-        border-left: 4px solid #dc3545;
-        max-width: 500px;
-      }
-      .error-message {
-        margin: 0;
-        color: #dc3545;
-        font-size: 14px;
-      }
-      .diagram-tooltip {
-        position: absolute;
-        background: rgba(0, 0, 0, 0.85);
-        color: #fff;
-        padding: 10px 14px;
-        border-radius: 4px;
-        font-size: 12px;
-        pointer-events: none;
-        z-index: 1000;
-        max-width: 250px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-      }
     `;
+  }
+
+  private getFeedbackStyles(): string {
+    return webviewFeedbackStyles;
+  }
+
+  private getTooltipStyles(): string {
+    return webviewTooltipStyles;
   }
 
   /**
    * Get inline script for webview
    */
   private getInlineScript(): string {
-    // Inline version of webview.js
-    // This is a simplified version - full implementation would be bundled
-    return `
-      (function() {
-        const vscode = acquireVsCodeApi();
-        let currentDiagramData = null;
-
-        function initialize() {
-          document.getElementById('zoom-in').addEventListener('click', () => {
-            // Zoom in
-          });
-          document.getElementById('zoom-out').addEventListener('click', () => {
-            // Zoom out
-          });
-          document.getElementById('fit-view').addEventListener('click', () => {
-            // Fit view
-          });
-          document.getElementById('abstraction-level').addEventListener('change', (e) => {
-            vscode.postMessage({ type: 'abstractionLevelChanged', level: parseInt(e.target.value) });
-          });
-          document.getElementById('export-png').addEventListener('click', () => {
-            vscode.postMessage({ type: 'exportRequested', format: 'png' });
-          });
-          document.getElementById('export-svg').addEventListener('click', () => {
-            vscode.postMessage({ type: 'exportRequested', format: 'svg' });
-          });
-          document.getElementById('refresh').addEventListener('click', () => {
-            vscode.postMessage({ type: 'refreshRequested' });
-          });
-
-          window.addEventListener('message', (event) => {
-            const message = event.data;
-            if (message.type === 'initialize') {
-              currentDiagramData = message.data;
-              document.getElementById('loading').style.display = 'none';
-            } else if (message.type === 'error') {
-              document.getElementById('loading').style.display = 'none';
-              document.getElementById('error').style.display = 'block';
-              document.querySelector('.error-message').textContent = message.message;
-            }
-          });
-
-          vscode.postMessage({ type: 'ready' });
-        }
-
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', initialize);
-        } else {
-          initialize();
-        }
-      })();
-    `;
+    return webviewInlineScript;
   }
 }

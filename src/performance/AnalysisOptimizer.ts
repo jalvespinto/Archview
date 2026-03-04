@@ -46,7 +46,7 @@ interface IncrementalCacheEntry {
  */
 export class AnalysisOptimizer {
   private incrementalCache: Map<string, IncrementalCacheEntry> = new Map();
-  private readonly DEFAULT_BATCH_SIZE = 10;
+  private readonly defaultBatchSize = 10;
 
   constructor() {
     // Worker thread support removed - using async batching only
@@ -77,7 +77,7 @@ export class AnalysisOptimizer {
     parseFunction: (filePath: string) => Promise<T>
   ): Promise<T[]> {
     const results: T[] = [];
-    const batches = this.createBatches(files, this.DEFAULT_BATCH_SIZE);
+    const batches = this.createBatches(files, this.defaultBatchSize);
 
     for (const batch of batches) {
       // Process batch in parallel
@@ -159,7 +159,7 @@ export class AnalysisOptimizer {
    */
   async batchReadFiles(filePaths: string[]): Promise<Map<string, string>> {
     const results = new Map<string, string>();
-    const batches = this.createBatches(filePaths, this.DEFAULT_BATCH_SIZE);
+    const batches = this.createBatches(filePaths, this.defaultBatchSize);
 
     for (const batch of batches) {
       // Read batch in parallel
@@ -195,7 +195,7 @@ export class AnalysisOptimizer {
    */
   async batchStatFiles(filePaths: string[]): Promise<Map<string, { mtimeMs: number; size: number }>> {
     const results = new Map<string, { mtimeMs: number; size: number }>();
-    const batches = this.createBatches(filePaths, this.DEFAULT_BATCH_SIZE);
+    const batches = this.createBatches(filePaths, this.defaultBatchSize);
 
     for (const batch of batches) {
       // Stat batch in parallel

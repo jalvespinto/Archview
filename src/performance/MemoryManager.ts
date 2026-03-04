@@ -35,7 +35,7 @@ export class MemoryManager {
   private limits: MemoryLimits;
   private baselineMemory: MemorySnapshot | null = null;
   private monitoringInterval: NodeJS.Timeout | null = null;
-  private readonly MONITORING_INTERVAL_MS = 1000; // Check every second
+  private readonly monitoringIntervalMs = 1000; // Check every second
 
   constructor(limits?: Partial<MemoryLimits>) {
     this.limits = {
@@ -115,7 +115,7 @@ export class MemoryManager {
         }
         this.stopMonitoring();
       }
-    }, this.MONITORING_INTERVAL_MS);
+    }, this.monitoringIntervalMs);
 
     return () => this.stopMonitoring();
   }
@@ -139,7 +139,7 @@ export class MemoryManager {
         }
         this.stopMonitoring();
       }
-    }, this.MONITORING_INTERVAL_MS);
+    }, this.monitoringIntervalMs);
 
     return () => this.stopMonitoring();
   }

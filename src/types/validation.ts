@@ -18,7 +18,6 @@ export class DataValidator {
   validateAnalysisResult(result: AnalysisResult): ValidationResult {
     const errors: string[] = [];
 
-    // Check required fields
     if (!result.components || result.components.length === 0) {
       errors.push('No components found in analysis');
     }
@@ -27,33 +26,9 @@ export class DataValidator {
       return { valid: false, errors };
     }
 
-    // Build component ID set for reference validation
     const componentIds = new Set(result.components.map(c => c.id));
-
-    // Validate component references in relationships
-    for (const rel of result.relationships || []) {
-      if (!componentIds.has(rel.source)) {
-        errors.push(`Invalid source reference in relationship ${rel.id}: ${rel.source}`);
-      }
-      if (!componentIds.has(rel.target)) {
-        errors.push(`Invalid target reference in relationship ${rel.id}: ${rel.target}`);
-      }
-    }
-
-    // Validate parent-child references
-    for (const component of result.components) {
-      if (component.parent && !componentIds.has(component.parent)) {
-        errors.push(`Invalid parent reference in component ${component.id}: ${component.parent}`);
-      }
-      
-      for (const childId of component.children || []) {
-        if (!componentIds.has(childId)) {
-          errors.push(`Invalid child reference in component ${component.id}: ${childId}`);
-        }
-      }
-    }
-
-    // Check for cycles in parent-child relationships
+    this.validateRelationshipReferences(result.relationships ?? [], componentIds, errors);
+    this.validateComponentHierarchyReferences(result.components, componentIds, errors);
     if (this.hasCycles(result.components)) {
       errors.push('Circular parent-child relationships detected');
     }
@@ -91,6 +66,40 @@ export class DataValidator {
     }
 
     return { valid: errors.length === 0, errors };
+  }
+
+  private validateRelationshipReferences(
+    relationships: AnalysisResult['relationships'],
+    componentIds: Set<string>,
+    errors: string[]
+  ): void {
+    for (const rel of relationships) {
+      if (!componentIds.has(rel.source)) {
+        errors.push(`Invalid source reference in relationship ${rel.id}: ${rel.source}`);
+      }
+
+      if (!componentIds.has(rel.target)) {
+        errors.push(`Invalid target reference in relationship ${rel.id}: ${rel.target}`);
+      }
+    }
+  }
+
+  private validateComponentHierarchyReferences(
+    components: Component[],
+    componentIds: Set<string>,
+    errors: string[]
+  ): void {
+    for (const component of components) {
+      if (component.parent && !componentIds.has(component.parent)) {
+        errors.push(`Invalid parent reference in component ${component.id}: ${component.parent}`);
+      }
+
+      for (const childId of component.children || []) {
+        if (!componentIds.has(childId)) {
+          errors.push(`Invalid child reference in component ${component.id}: ${childId}`);
+        }
+      }
+    }
   }
 
   /**

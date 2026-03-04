@@ -20,7 +20,7 @@ import { StyleManager } from './StyleManager';
 
 export class DiagramGenerator {
   private styleManager: StyleManager;
-  private readonly GENERATION_TIMEOUT_MS = 60000; // 60 seconds per requirements
+  private readonly generationTimeoutMs = 60000; // 60 seconds per requirements
 
   constructor() {
     this.styleManager = new StyleManager();
@@ -37,7 +37,7 @@ export class DiagramGenerator {
   ): Promise<DiagramData> {
     return this.withTimeout(
       this.generateDiagramInternal(model, abstractionLevel),
-      this.GENERATION_TIMEOUT_MS,
+      this.generationTimeoutMs,
       'Diagram generation timed out'
     );
   }
@@ -127,41 +127,39 @@ export class DiagramGenerator {
       return Language.Unknown;
     }
 
-    // Count file extensions
     const extensionCounts = new Map<Language, number>();
 
     for (const filePath of filePaths) {
       const ext = filePath.split('.').pop()?.toLowerCase();
-      let language = Language.Unknown;
-
-      switch (ext) {
-        case 'py':
-          language = Language.Python;
-          break;
-        case 'js':
-        case 'jsx':
-          language = Language.JavaScript;
-          break;
-        case 'ts':
-        case 'tsx':
-          language = Language.TypeScript;
-          break;
-        case 'java':
-          language = Language.Java;
-          break;
-        case 'go':
-          language = Language.Go;
-          break;
-        default:
-          // Unknown file types are handled as generic components
-          // Requirement 12.5: Include unrecognized languages as generic components
-          language = Language.Unknown;
-      }
-
+      const language = this.getLanguageFromExtension(ext);
       extensionCounts.set(language, (extensionCounts.get(language) || 0) + 1);
     }
 
-    // Return most common language
+    return this.getDominantLanguage(extensionCounts);
+  }
+
+  private getLanguageFromExtension(ext: string | undefined): Language {
+    switch (ext) {
+      case 'py':
+        return Language.Python;
+      case 'js':
+      case 'jsx':
+        return Language.JavaScript;
+      case 'ts':
+      case 'tsx':
+        return Language.TypeScript;
+      case 'java':
+        return Language.Java;
+      case 'go':
+        return Language.Go;
+      default:
+        // Unknown file types are handled as generic components
+        // Requirement 12.5: Include unrecognized languages as generic components
+        return Language.Unknown;
+    }
+  }
+
+  private getDominantLanguage(extensionCounts: Map<Language, number>): Language {
     let maxCount = 0;
     let dominantLanguage = Language.Unknown;
 
@@ -182,27 +180,35 @@ export class DiagramGenerator {
     const role = component.role.toLowerCase();
     const name = component.name.toLowerCase();
 
-    // Check for service patterns
-    if (role.includes('service') || name.includes('service')) {
+    if (this.isServiceComponent(role, name)) {
       return ComponentType.Service;
     }
 
-    // Check for module/package patterns
-    if (
-      role.includes('module') ||
-      role.includes('package') ||
-      role.includes('layer')
-    ) {
+    if (this.isModuleLikeComponent(role)) {
       return ComponentType.Module;
     }
 
-    // Check for interface patterns
-    if (role.includes('interface') || name.startsWith('i')) {
+    if (this.isInterfaceComponent(role, name)) {
       return ComponentType.Interface;
     }
 
-    // Default based on abstraction level
-    switch (component.abstractionLevel) {
+    return this.mapAbstractionLevelToComponentType(component.abstractionLevel);
+  }
+
+  private isServiceComponent(role: string, name: string): boolean {
+    return role.includes('service') || name.includes('service');
+  }
+
+  private isModuleLikeComponent(role: string): boolean {
+    return role.includes('module') || role.includes('package') || role.includes('layer');
+  }
+
+  private isInterfaceComponent(role: string, name: string): boolean {
+    return role.includes('interface') || name.startsWith('i');
+  }
+
+  private mapAbstractionLevelToComponentType(level: AbstractionLevel): ComponentType {
+    switch (level) {
       case AbstractionLevel.Overview:
         return ComponentType.Package;
       case AbstractionLevel.Module:

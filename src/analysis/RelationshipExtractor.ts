@@ -54,21 +54,33 @@ export class RelationshipExtractor {
    * @returns Array of relationships between components
    */
   async extractRelationships(context: RelationshipExtractionContext): Promise<Relationship[]> {
-    const { ast } = context;
+    const runExtraction = (astToExtract: ParsedAST): Relationship[] => {
+      const extractionContext: RelationshipExtractionContext = { ...context, ast: astToExtract };
+      switch (astToExtract.language) {
+        case Language.Python:
+          return this.extractPythonRelationships(extractionContext);
+        case Language.JavaScript:
+        case Language.TypeScript:
+          return this.extractJavaScriptRelationships(extractionContext);
+        case Language.Java:
+          return this.extractJavaRelationships(extractionContext);
+        case Language.Go:
+          return this.extractGoRelationships(extractionContext);
+        default:
+          return [];
+      }
+    };
 
-    // Select extraction strategy based on language
-    switch (ast.language) {
-      case Language.Python:
-        return this.extractPythonRelationships(context);
-      case Language.JavaScript:
-      case Language.TypeScript:
-        return this.extractJavaScriptRelationships(context);
-      case Language.Java:
-        return this.extractJavaRelationships(context);
-      case Language.Go:
-        return this.extractGoRelationships(context);
-      default:
-        return [];
+    const { ast, parserManager } = context;
+    const relationships = runExtraction(ast);
+    if (relationships.length > 0 || ast.language === Language.Unknown || ast.sourceCode.trim().length === 0) {
+      return relationships;
+    }
+
+    try {
+      return runExtraction(await parserManager.parseFile(ast.filePath, ast.sourceCode, ast.language));
+    } catch {
+      return relationships;
     }
   }
 
